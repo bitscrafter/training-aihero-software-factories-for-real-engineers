@@ -17,7 +17,9 @@ import {
   teamMembers,
   TeamMemberRole,
   LessonProgressStatus,
+  UserRole,
 } from "~/db/schema";
+import { countOpenRefundRequests } from "~/lib/refund-requests.server";
 
 function getAllUsers() {
   return db.select().from(users).all();
@@ -213,6 +215,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     countryTierInfo,
     countries: COUNTRIES,
     isTeamAdmin: currentUserId ? isTeamAdmin(currentUserId) : false,
+    // Only Admins resolve Refund Requests, so only they see the count.
+    openRefundRequestCount:
+      currentUser?.role === UserRole.Admin ? countOpenRefundRequests() : null,
   };
 }
 
@@ -225,6 +230,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     countryTierInfo,
     countries,
     isTeamAdmin: userIsTeamAdmin,
+    openRefundRequestCount,
   } = loaderData;
 
   return (
@@ -233,6 +239,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         currentUser={currentUser}
         recentCourses={recentCourses}
         isTeamAdmin={userIsTeamAdmin}
+        openRefundRequestCount={openRefundRequestCount}
       />
       <main className="flex-1 overflow-y-auto">
         <Outlet />

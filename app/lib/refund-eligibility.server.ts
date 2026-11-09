@@ -12,7 +12,10 @@ import {
   videoWatchEvents,
 } from "~/db/schema";
 import { getDiscountForCountry } from "~/lib/ppp";
-import type { RefundFacts } from "~/lib/refund-eligibility";
+import {
+  getRefundableAmount,
+  type RefundFacts,
+} from "~/lib/refund-eligibility";
 
 /**
  * Reads, for a learner's latest purchase of a course, the facts that
@@ -32,22 +35,56 @@ export function getRefundFacts(
 
   if (!purchase) return null;
 
-  const lessonIds = getLessonIds(course.id);
-
   return {
     purchaseId: purchase.id,
     facts: {
       purchasedAt: new Date(purchase.createdAt),
-      amountPaid: purchase.amountPaid,
-      listPrice: course.price,
-      purchasingPowerDiscountApplied:
-        getDiscountForCountry(purchase.country) > 0,
-      secondsWatched: getSecondsWatched(userId, lessonIds),
-      lessonsCompleted: getCompletedLessonCount(userId, lessonIds),
-      totalLessons: lessonIds.length,
+      ...getPriceFacts(purchase, course),
+      ...getCourseUsage(userId, course.id),
       isClaimedTeamSeat: isClaimedTeamSeat(purchase.id),
       hasOpenRefundRequest: hasOpenRefundRequest(purchase.id),
     },
+  };
+}
+
+/**
+ * The Refund a purchase of the course would get, in cents, without checking
+ * eligibility. For the Admin Refund Requests screen and approval.
+ */
+export function getRefundableAmountForPurchase(
+  purchase: { amountPaid: number; country: string | null },
+  course: { price: number }
+): number {
+  return getRefundableAmount(getPriceFacts(purchase, course));
+}
+
+/**
+ * How much of a course a learner has used, all-time across every purchase:
+ * watch time in seconds, lessons completed, and the course's lesson count.
+ */
+export function getCourseUsage(
+  userId: number,
+  courseId: number
+): Pick<RefundFacts, "secondsWatched" | "lessonsCompleted" | "totalLessons"> {
+  const lessonIds = getLessonIds(courseId);
+  return {
+    secondsWatched: getSecondsWatched(userId, lessonIds),
+    lessonsCompleted: getCompletedLessonCount(userId, lessonIds),
+    totalLessons: lessonIds.length,
+  };
+}
+
+function getPriceFacts(
+  purchase: { amountPaid: number; country: string | null },
+  course: { price: number }
+): Pick<
+  RefundFacts,
+  "amountPaid" | "listPrice" | "purchasingPowerDiscountApplied"
+> {
+  return {
+    amountPaid: purchase.amountPaid,
+    listPrice: course.price,
+    purchasingPowerDiscountApplied: getDiscountForCountry(purchase.country) > 0,
   };
 }
 

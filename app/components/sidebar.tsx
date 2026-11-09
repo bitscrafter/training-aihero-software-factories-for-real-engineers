@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   GraduationCap,
   MessageSquare,
+  ReceiptText,
   Shield,
   Tag,
   Users,
@@ -40,6 +41,8 @@ interface SidebarProps {
   currentUser: CurrentUser | null;
   recentCourses?: RecentCourse[];
   isTeamAdmin?: boolean;
+  /** Open Refund Requests, for Admins; null for everyone else. */
+  openRefundRequestCount?: number | null;
 }
 
 interface NavItem {
@@ -98,6 +101,12 @@ const navItems: NavItem[] = [
     icon: <Tag className="size-4" />,
     roles: [UserRole.Admin],
   },
+  {
+    label: "Refund Requests",
+    to: "/admin/refund-requests",
+    icon: <ReceiptText className="size-4" />,
+    roles: [UserRole.Admin],
+  },
 ];
 
 function isVisible(item: NavItem, role: UserRole | null): boolean {
@@ -110,6 +119,7 @@ export function Sidebar({
   currentUser,
   recentCourses = [],
   isTeamAdmin = false,
+  openRefundRequestCount = null,
 }: SidebarProps) {
   const currentUserRole = currentUser?.role ?? null;
   const [isDark, setIsDark] = useState(false);
@@ -153,6 +163,12 @@ export function Sidebar({
             >
               {item.icon}
               {item.label}
+              {item.to === "/admin/refund-requests" &&
+                openRefundRequestCount !== null && (
+                  <span className="ml-auto rounded-full bg-sidebar-accent px-2 text-xs tabular-nums">
+                    {openRefundRequestCount}
+                  </span>
+                )}
             </NavLink>
           ))}
         {isTeamAdmin && (

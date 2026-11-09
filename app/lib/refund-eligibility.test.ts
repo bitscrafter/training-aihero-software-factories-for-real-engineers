@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { checkRefundEligibility, type RefundFacts } from "./refund-eligibility";
+import {
+  checkRefundEligibility,
+  getRefundableAmount,
+  type RefundFacts,
+} from "./refund-eligibility";
 
 // Dates are built in local time: the window is counted in whole local days.
 const PURCHASED_AT = new Date(2026, 2, 1, 10, 0); // 1 March 2026, 10:00
@@ -183,5 +187,35 @@ describe("checkRefundEligibility", () => {
         TODAY
       )
     ).toMatchObject({ eligible: true, refundableAmount: 4900 });
+  });
+});
+
+describe("getRefundableAmount", () => {
+  it("is the amount paid for a purchasing-power price", () => {
+    expect(
+      getRefundableAmount({
+        amountPaid: 2450,
+        listPrice: 4900,
+        purchasingPowerDiscountApplied: true,
+      })
+    ).toBe(2450);
+  });
+
+  it("is the list price, not the amount paid, without a discount", () => {
+    expect(
+      getRefundableAmount({
+        amountPaid: 3900,
+        listPrice: 4900,
+        purchasingPowerDiscountApplied: false,
+      })
+    ).toBe(4900);
+  });
+
+  it("does not depend on eligibility: a closed window still has an amount", () => {
+    expect(
+      getRefundableAmount(
+        facts({ purchasedAt: new Date(2020, 0, 1), secondsWatched: 99999 })
+      )
+    ).toBe(4900);
   });
 });
