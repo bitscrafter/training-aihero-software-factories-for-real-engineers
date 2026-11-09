@@ -464,6 +464,55 @@ describe("requesting a refund", () => {
     expect(storedRefundRequests()).toHaveLength(1);
   });
 
+  it("refuses a new purchase once the learner has had 3 Refunds for the course", async () => {
+    const { course, learner } = seedEligibleLearner({
+      createdAt: "2026-03-08T12:00:00.000Z",
+    });
+    seedEarlierRefundRequests(learner.id, course.id, [
+      schema.RefundRequestStatus.Approved,
+      schema.RefundRequestStatus.Approved,
+      schema.RefundRequestStatus.Approved,
+    ]);
+
+    expect(await expectRefusal(requestRefund())).toEqual({
+      status: 403,
+      message:
+        "You have already had 3 Refunds for this course, so this purchase can't be refunded.",
+    });
+    expect(storedRefundRequests()).toHaveLength(3);
+  });
+
+  it("accepts a new purchase after 2 Refunds and a declined request for the course", async () => {
+    const { course, learner } = seedEligibleLearner({
+      createdAt: "2026-03-08T12:00:00.000Z",
+    });
+    seedEarlierRefundRequests(learner.id, course.id, [
+      schema.RefundRequestStatus.Approved,
+      schema.RefundRequestStatus.Approved,
+      schema.RefundRequestStatus.Declined,
+    ]);
+
+    await requestRefund();
+
+    expect(storedRefundRequests()).toHaveLength(4);
+  });
+
+  it("does not count Refunds for other courses toward the limit", async () => {
+    const { learner } = seedEligibleLearner({
+      createdAt: "2026-03-08T12:00:00.000Z",
+    });
+    const otherCourse = seedOtherCourse();
+    seedEarlierRefundRequests(learner.id, otherCourse.id, [
+      schema.RefundRequestStatus.Approved,
+      schema.RefundRequestStatus.Approved,
+      schema.RefundRequestStatus.Approved,
+    ]);
+
+    await requestRefund();
+
+    expect(storedRefundRequests()).toHaveLength(4);
+  });
+
   it("refuses a reason that is too short, storing nothing", async () => {
     seedEligibleLearner();
 
@@ -482,3 +531,53 @@ describe("requesting a refund", () => {
     expect(storedRefundRequests()).toEqual([]);
   });
 });
+
+/**
+ * Earlier purchases of the course by the learner, each with a resolved Refund
+ * Request of the given status. Bought before the learner's latest purchase.
+ */
+function seedEarlierRefundRequests(
+  userId: number,
+  courseId: number,
+  statuses: schema.RefundRequestStatus[]
+) {
+  statuses.forEach((status, index) => {
+    const purchase = seedPurchase({
+      userId,
+      courseId,
+      createdAt: `2026-01-0${index + 1}T12:00:00.000Z`,
+    });
+    db.insert(schema.refundRequests)
+      .values({
+        purchaseId: purchase.id,
+        status,
+        reason: "The course was not what I expected.",
+        amountRefunded:
+          status === schema.RefundRequestStatus.Approved ? 4900 : null,
+        resolvedAt: `2026-01-0${index + 2}T12:00:00.000Z`,
+      })
+      .run();
+  });
+}
+
+function seedOtherCourse() {
+  const course = db
+    .select()
+    .from(schema.courses)
+    .where(eq(schema.courses.slug, "testing-things"))
+    .get()!;
+  return db
+    .insert(schema.courses)
+    .values({
+      title: "Other Things",
+      slug: "other-things",
+      description: "Another course",
+      salesCopy: "## Other Things",
+      instructorId: course.instructorId,
+      categoryId: course.categoryId,
+      status: schema.CourseStatus.Published,
+      price: 4900,
+    })
+    .returning()
+    .get();
+}

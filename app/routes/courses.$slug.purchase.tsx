@@ -39,6 +39,8 @@ import { formatDuration, formatPrice } from "~/lib/utils";
 import { resolveCountry } from "~/lib/country.server";
 import { calculatePppPrice, getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { parseFormData, parseParams } from "~/lib/validation";
+import { getRefundLimitWarning } from "~/lib/refund-eligibility";
+import { getApprovedRefundCount } from "~/lib/refund-eligibility.server";
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
@@ -292,6 +294,9 @@ export async function loader({ params, request, url }: Route.LoaderArgs) {
     country,
     countryName,
     isEnrolled: enrolled,
+    refundLimitWarning: getRefundLimitWarning(
+      getApprovedRefundCount(currentUserId, course.id)
+    ),
   };
 }
 
@@ -348,6 +353,7 @@ export default function PurchaseConfirmation({
     tierInfo,
     countryName,
     isEnrolled,
+    refundLimitWarning,
   } = loaderData;
   const fetcher = useFetcher();
   const isSubmitting = fetcher.state !== "idle";
@@ -434,6 +440,17 @@ export default function PurchaseConfirmation({
               <div className="mb-4 rounded-lg bg-green-50 p-3 dark:bg-green-900/20">
                 <p className="text-sm text-green-800 dark:text-green-300">
                   PPP discount applied for {countryName} — {tierInfo.label}
+                </p>
+              </div>
+            )}
+
+            {refundLimitWarning && (
+              <div
+                role="alert"
+                className="mb-4 rounded-lg bg-amber-50 p-3 dark:bg-amber-900/20"
+              >
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  {refundLimitWarning}
                 </p>
               </div>
             )}
