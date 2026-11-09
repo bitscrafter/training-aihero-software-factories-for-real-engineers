@@ -107,6 +107,24 @@ const RULES: ReadonlyArray<{
   },
 ];
 
+/**
+ * The Refund a purchase would get, in cents. This is the single rule for the
+ * amount: the eligibility verdict, the Admin Refund Requests screen and
+ * approval all use it. It does not check eligibility.
+ */
+export function getRefundableAmount(
+  facts: Pick<
+    RefundFacts,
+    "amountPaid" | "listPrice" | "purchasingPowerDiscountApplied"
+  >
+): number {
+  // A purchasing-power price is given back at what was paid; otherwise the
+  // course's list price.
+  return facts.purchasingPowerDiscountApplied
+    ? facts.amountPaid
+    : facts.listPrice;
+}
+
 export function checkRefundEligibility(
   facts: RefundFacts,
   today: Date
@@ -122,11 +140,7 @@ export function checkRefundEligibility(
 
   return {
     eligible: true,
-    // A purchasing-power price is given back at what was paid; otherwise the
-    // course's list price.
-    refundableAmount: facts.purchasingPowerDiscountApplied
-      ? facts.amountPaid
-      : facts.listPrice,
+    refundableAmount: getRefundableAmount(facts),
     lastDayOfWindow: lastDayOfWindow(facts.purchasedAt),
   };
 }
