@@ -14,7 +14,7 @@ import { enrollments } from "~/db/schema";
 export type Enrollment = typeof enrollments.$inferSelect;
 
 /** `db` itself, or the transaction handed to a `db.transaction` callback. */
-type Executor = Pick<typeof db, "update">;
+export type Executor = Pick<typeof db, "update">;
 
 /**
  * The condition that keeps only active Enrollments, leaving out ended ones.

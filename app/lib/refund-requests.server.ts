@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { db } from "~/db";
-import { endEnrollment } from "~/lib/enrollment.server";
+import { endEnrollment, type Executor } from "~/lib/enrollment.server";
 import {
   courses,
   purchases,
@@ -185,9 +185,6 @@ export function declineRefundRequest(
     note,
   };
 }
-
-/** `db` itself, or the transaction handed to a `db.transaction` callback. */
-type Executor = Pick<typeof db, "update">;
 
 /**
  * Records the resolution, with who resolved it and when, but only while the
