@@ -9,10 +9,13 @@ export type RefundFacts = {
   totalLessons: number;
   isClaimedTeamSeat: boolean;
   hasOpenRefundRequest: boolean;
+  /** An earlier Refund Request on this purchase was approved or declined. */
+  hasResolvedRefundRequest: boolean;
 };
 
 export type RefundRule =
   | "openRefundRequest"
+  | "resolvedRefundRequest"
   | "claimedTeamSeat"
   | "refundWindow"
   | "watchTime"
@@ -45,6 +48,11 @@ function lastDayOfWindow(purchasedAt: Date): string {
 
 function hasNoOpenRefundRequest(facts: RefundFacts): boolean {
   return !facts.hasOpenRefundRequest;
+}
+
+// A purchase gets at most one Refund Request, and its resolution is final.
+function hasNoResolvedRefundRequest(facts: RefundFacts): boolean {
+  return !facts.hasResolvedRefundRequest;
 }
 
 // A seat bought on a team licence and since claimed belongs to the team; the
@@ -84,6 +92,12 @@ const RULES: ReadonlyArray<{
     name: "openRefundRequest",
     passes: hasNoOpenRefundRequest,
     message: "You already have a request open on this purchase.",
+  },
+  {
+    name: "resolvedRefundRequest",
+    passes: hasNoResolvedRefundRequest,
+    message:
+      "This purchase already had a Refund Request, and that decision is final.",
   },
   {
     name: "claimedTeamSeat",

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { db } from "~/db";
 import {
   coupons,
@@ -43,6 +43,7 @@ export function getRefundFacts(
       ...getCourseUsage(userId, course.id),
       isClaimedTeamSeat: isClaimedTeamSeat(purchase.id),
       hasOpenRefundRequest: hasOpenRefundRequest(purchase.id),
+      hasResolvedRefundRequest: hasResolvedRefundRequest(purchase.id),
     },
   };
 }
@@ -159,4 +160,19 @@ function hasOpenRefundRequest(purchaseId: number): boolean {
     )
     .get();
   return open !== undefined;
+}
+
+// Approved or declined: anything no longer waiting for an Admin.
+function hasResolvedRefundRequest(purchaseId: number): boolean {
+  const resolved = db
+    .select({ id: refundRequests.id })
+    .from(refundRequests)
+    .where(
+      and(
+        eq(refundRequests.purchaseId, purchaseId),
+        ne(refundRequests.status, RefundRequestStatus.Requested)
+      )
+    )
+    .get();
+  return resolved !== undefined;
 }
