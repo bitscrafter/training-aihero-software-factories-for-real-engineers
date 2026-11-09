@@ -1,14 +1,17 @@
-import { data, isRouteErrorResponse, Link } from "react-router";
+import { data, isRouteErrorResponse, Link, useFetcher } from "react-router";
 import { eq } from "drizzle-orm";
 import { AlertTriangle } from "lucide-react";
 import type { Route } from "./+types/admin.refund-requests";
 import { getCurrentUserId } from "~/lib/session";
 import { db } from "~/db";
 import { RefundRequestStatus, UserRole, users } from "~/db/schema";
+import { z } from "zod";
 import {
+  approveRefundRequest,
   getOpenRefundRequests,
   getResolvedRefundRequests,
 } from "~/lib/refund-requests.server";
+import { parseFormData } from "~/lib/validation";
 import { daysSince, formatPrice } from "~/lib/utils";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -24,7 +27,8 @@ function getUserById(id: number) {
   return db.select().from(users).where(eq(users.id, id)).get();
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
+/** Throws 401 or 403 unless an Admin is signed in. Returns the Admin. */
+async function requireAdmin(request: Request) {
   const currentUserId = await getCurrentUserId(request);
 
   if (!currentUserId) {
@@ -39,9 +43,83 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("Only Admins can access this page.", { status: 403 });
   }
 
+  return currentUser;
+}
+
+export async function loader({ request }: Route.LoaderArgs) {
+  await requireAdmin(request);
+
   return {
     open: getOpenRefundRequests(),
     resolved: getResolvedRefundRequests(),
+  };
+}
+
+const resolutionFormSchema = z.object({
+  intent: z.literal("approve"),
+  refundRequestId: z.coerce.number().int().positive(),
+});
+
+export async function action({ request }: Route.ActionArgs) {
+  const admin = await requireAdmin(request);
+
+  const parsed = parseFormData(await request.formData(), resolutionFormSchema);
+  if (!parsed.success) {
+    throw data("Invalid form submission.", { status: 400 });
+  }
+
+  const result = approveRefundRequest(parsed.data.refundRequestId, admin.id);
+
+  if (result.outcome === "notFound") {
+    throw data("Refund Request not found.", { status: 404 });
+  }
+
+  if (result.outcome === "alreadyResolved") {
+    return data(
+      { error: "This Refund Request is already resolved." },
+      { status: 409 }
+    );
+  }
+
+  if (result.outcome === "approved") {
+    const email = buildRefundApprovedEmail({
+      learnerName: result.learner.name,
+      learnerEmail: result.learner.email,
+      courseTitle: result.courseTitle,
+      amount: result.amountRefunded,
+    });
+    console.log(
+      `[email] to=${email.to} subject=${email.subject}\n${email.body}`
+    );
+  }
+
+  return { error: null };
+}
+
+/**
+ * The email a learner gets when their Refund Request is approved. There is no
+ * mail transport wired up yet, so the built message goes to the server log.
+ */
+function buildRefundApprovedEmail(input: {
+  learnerName: string;
+  learnerEmail: string;
+  courseTitle: string;
+  amount: number;
+}) {
+  return {
+    to: input.learnerEmail,
+    subject: `Refund approved: ${input.courseTitle}`,
+    body: [
+      `Hi ${input.learnerName},`,
+      "",
+      `We have approved your refund request for "${input.courseTitle}".`,
+      `Your Refund is ${formatPrice(input.amount)}.`,
+      `Your access to "${input.courseTitle}" has ended.`,
+      "",
+      "We return the money to you outside Cadence, so you will not see it in your Cadence account.",
+      "",
+      "— The Cadence team",
+    ].join("\n"),
   };
 }
 
@@ -66,6 +144,36 @@ function formatRequestedAgo(iso: string) {
 type OpenRefundRequest = Route.ComponentProps["loaderData"]["open"][number];
 type ResolvedRefundRequest =
   Route.ComponentProps["loaderData"]["resolved"][number];
+
+function ApproveRefundRequestButton({
+  request,
+}: {
+  request: OpenRefundRequest;
+}) {
+  const fetcher = useFetcher<typeof action>();
+  const amount = formatPrice(request.refundAmount);
+  const firstName = request.learner.name.split(" ")[0];
+  const error = fetcher.data?.error;
+
+  return (
+    <fetcher.Form
+      method="post"
+      onSubmit={(event) => {
+        const confirmed = confirm(
+          `Refund ${amount} and end ${firstName}'s access to ${request.courseTitle}?`
+        );
+        if (!confirmed) event.preventDefault();
+      }}
+    >
+      <input type="hidden" name="intent" value="approve" />
+      <input type="hidden" name="refundRequestId" value={request.id} />
+      <Button type="submit" size="sm" disabled={fetcher.state !== "idle"}>
+        Approve {amount}
+      </Button>
+      {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
+    </fetcher.Form>
+  );
+}
 
 function OpenRefundRequestCard({ request }: { request: OpenRefundRequest }) {
   return (
@@ -96,7 +204,10 @@ function OpenRefundRequestCard({ request }: { request: OpenRefundRequest }) {
           completed
         </div>
         <blockquote className="pt-1 italic">"{request.reason}"</blockquote>
-        {/* Approve and Decline actions arrive with #13 and #16. */}
+        <div className="flex items-center gap-2 pt-2">
+          <ApproveRefundRequestButton request={request} />
+          {/* The Decline action arrives with #16. */}
+        </div>
       </CardContent>
     </Card>
   );

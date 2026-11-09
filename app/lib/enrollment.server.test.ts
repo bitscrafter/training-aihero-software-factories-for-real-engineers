@@ -95,4 +95,22 @@ describe("Enrollment", () => {
 
     expect(enrollment.isEnrolled(learner.id, otherCourse.id)).toBe(false);
   });
+
+  it("a learner whose Enrollment has ended is no longer enrolled, but the Enrollment is kept", () => {
+    const course = seedCourse("testing-things");
+    const learner = seedLearner();
+    enrollment.enroll(learner.id, course.id);
+
+    enrollment.endEnrollment(learner.id, course.id);
+
+    expect(enrollment.isEnrolled(learner.id, course.id)).toBe(false);
+    expect(enrollment.findEnrollment(learner.id, course.id)).toBeUndefined();
+    expect(db.select().from(schema.enrollments).all()).toEqual([
+      expect.objectContaining({
+        userId: learner.id,
+        courseId: course.id,
+        endedAt: expect.any(String),
+      }),
+    ]);
+  });
 });
