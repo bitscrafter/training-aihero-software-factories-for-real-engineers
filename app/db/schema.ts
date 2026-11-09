@@ -249,6 +249,8 @@ export const refundRequests = sqliteTable(
     // The Refund given. Null until someone approves; a declined request
     // refunds nothing.
     amountRefunded: integer("amount_refunded"),
+    // The Admin's note to the learner. Set only when the request is declined.
+    declineNote: text("decline_note"),
     requestedAt: text("requested_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),

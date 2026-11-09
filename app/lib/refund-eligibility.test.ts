@@ -21,6 +21,7 @@ function facts(overrides: Partial<RefundFacts> = {}): RefundFacts {
     totalLessons: 10,
     isClaimedTeamSeat: false,
     hasOpenRefundRequest: false,
+    hasResolvedRefundRequest: false,
     ...overrides,
   };
 }
@@ -125,6 +126,35 @@ describe("checkRefundEligibility", () => {
       failedRule: "openRefundRequest",
       message: "You already have a request open on this purchase.",
     });
+  });
+
+  it("refuses a purchase whose Refund Request was already resolved", () => {
+    expect(
+      checkRefundEligibility(facts({ hasResolvedRefundRequest: true }), TODAY)
+    ).toEqual({
+      eligible: false,
+      failedRule: "resolvedRefundRequest",
+      message:
+        "This purchase already had a Refund Request, and that decision is final.",
+    });
+  });
+
+  it("reports an open request before a resolved one", () => {
+    expect(
+      checkRefundEligibility(
+        facts({ hasOpenRefundRequest: true, hasResolvedRefundRequest: true }),
+        TODAY
+      )
+    ).toMatchObject({ failedRule: "openRefundRequest" });
+  });
+
+  it("reports a resolved request before a claimed team seat", () => {
+    expect(
+      checkRefundEligibility(
+        facts({ hasResolvedRefundRequest: true, isClaimedTeamSeat: true }),
+        TODAY
+      )
+    ).toMatchObject({ failedRule: "resolvedRefundRequest" });
   });
 
   it("reports the first failing rule when several fail", () => {

@@ -1,3 +1,4 @@
+import { and, eq } from "drizzle-orm";
 import { RouterContextProvider } from "react-router";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as schema from "~/db/schema";
@@ -99,7 +100,7 @@ function seedPurchase(input: {
     .get();
 }
 
-/** A learner, signed in, who bought the course recently and watched nothing. */
+/** A learner, signed in, enrolled, who bought the course recently and watched nothing. */
 function seedEligibleLearner(
   purchaseOverrides: Pick<
     Parameters<typeof seedPurchase>[0],
@@ -113,6 +114,9 @@ function seedEligibleLearner(
     courseId: course.id,
     ...purchaseOverrides,
   });
+  db.insert(schema.enrollments)
+    .values({ userId: learner.id, courseId: course.id })
+    .run();
   session.userId = learner.id;
   return { course, learner, purchase };
 }
@@ -236,6 +240,56 @@ describe("requesting a refund", () => {
       message: "You have not bought this course.",
     });
     expect(storedRefundRequests()).toEqual([]);
+  });
+
+  it("refuses a team buyer, who has a purchase but no Enrollment", async () => {
+    const course = seedCourse();
+    const buyer = seedLearner();
+    const purchase = seedPurchase({ userId: buyer.id, courseId: course.id });
+    const team = db.insert(schema.teams).values({}).returning().get();
+    db.insert(schema.coupons)
+      .values({
+        teamId: team.id,
+        courseId: course.id,
+        code: "SEAT-1",
+        purchaseId: purchase.id,
+      })
+      .run();
+    session.userId = buyer.id;
+
+    expect(await expectRefusal(requestRefund())).toEqual({
+      status: 403,
+      message: "You are not enrolled in this course.",
+    });
+    expect(storedRefundRequests()).toEqual([]);
+  });
+
+  it("refuses a refunded learner, whose Enrollment has ended", async () => {
+    const { course, learner, purchase } = seedEligibleLearner();
+    db.insert(schema.refundRequests)
+      .values({
+        purchaseId: purchase.id,
+        status: schema.RefundRequestStatus.Approved,
+        reason: "The course was not what I expected.",
+        amountRefunded: 4900,
+        resolvedAt: PURCHASED_RECENTLY,
+      })
+      .run();
+    db.update(schema.enrollments)
+      .set({ endedAt: PURCHASED_RECENTLY })
+      .where(
+        and(
+          eq(schema.enrollments.userId, learner.id),
+          eq(schema.enrollments.courseId, course.id)
+        )
+      )
+      .run();
+
+    expect(await expectRefusal(requestRefund())).toEqual({
+      status: 403,
+      message: "You are not enrolled in this course.",
+    });
+    expect(storedRefundRequests()).toHaveLength(1);
   });
 
   it("refuses a claimed team seat", async () => {
@@ -387,6 +441,25 @@ describe("requesting a refund", () => {
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 409,
       message: "You already have a request open on this purchase.",
+    });
+    expect(storedRefundRequests()).toHaveLength(1);
+  });
+
+  it("refuses a second request once the first was declined, because the decision is final", async () => {
+    const { purchase } = seedEligibleLearner();
+    db.insert(schema.refundRequests)
+      .values({
+        purchaseId: purchase.id,
+        status: schema.RefundRequestStatus.Declined,
+        reason: "The course was not what I expected.",
+        resolvedAt: PURCHASED_RECENTLY,
+      })
+      .run();
+
+    expect(await expectRefusal(requestRefund())).toEqual({
+      status: 409,
+      message:
+        "This purchase already had a Refund Request, and that decision is final.",
     });
     expect(storedRefundRequests()).toHaveLength(1);
   });
