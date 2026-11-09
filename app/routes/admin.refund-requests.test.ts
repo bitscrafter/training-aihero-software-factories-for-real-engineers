@@ -132,6 +132,15 @@ async function loadRefundRequests() {
 
 /** Runs the loader or action, expecting it to throw a `data(...)` refusal. */
 async function expectRefusal(promise: Promise<unknown>) {
+  const thrown = await catchRefusal(promise);
+  const init = thrown.init;
+  return typeof init === "object" && init !== null && "status" in init
+    ? init.status
+    : undefined;
+}
+
+/** The `data(...)` refusal the loader or action throws. */
+async function catchRefusal(promise: Promise<unknown>) {
   const thrown = await promise.then(
     () => {
       throw new Error("Expected a refusal, but it succeeded");
@@ -145,10 +154,7 @@ async function expectRefusal(promise: Promise<unknown>) {
   ) {
     throw thrown;
   }
-  const init = thrown.init;
-  return typeof init === "object" && init !== null && "status" in init
-    ? init.status
-    : undefined;
+  return thrown;
 }
 
 describe("the Admin Refund Requests screen", () => {
@@ -173,9 +179,24 @@ describe("the Admin Refund Requests screen", () => {
     });
     db.insert(schema.videoWatchEvents)
       .values([
-        { userId: ana.id, lessonId: lessonIds[0], eventType: "progress", positionSeconds: 600 },
-        { userId: ana.id, lessonId: lessonIds[0], eventType: "progress", positionSeconds: 1200 },
-        { userId: ana.id, lessonId: lessonIds[1], eventType: "progress", positionSeconds: 1320 },
+        {
+          userId: ana.id,
+          lessonId: lessonIds[0],
+          eventType: "progress",
+          positionSeconds: 600,
+        },
+        {
+          userId: ana.id,
+          lessonId: lessonIds[0],
+          eventType: "progress",
+          positionSeconds: 1200,
+        },
+        {
+          userId: ana.id,
+          lessonId: lessonIds[1],
+          eventType: "progress",
+          positionSeconds: 1320,
+        },
       ])
       .run();
     db.insert(schema.lessonProgress)
@@ -485,13 +506,9 @@ describe("approving a Refund Request", () => {
 
     const logged = loggedLines.join("\n");
     expect(logged).toContain("to=ana@example.com");
-    expect(logged).toContain(
-      "subject=Refund approved: Advanced TypeScript"
-    );
+    expect(logged).toContain("subject=Refund approved: Advanced TypeScript");
     expect(logged).toContain("Your Refund is $49.00.");
-    expect(logged).toContain(
-      'Your access to "Advanced TypeScript" has ended.'
-    );
+    expect(logged).toContain('Your access to "Advanced TypeScript" has ended.');
     expect(logged).toContain("outside Cadence");
   });
 
@@ -505,10 +522,10 @@ describe("approving a Refund Request", () => {
     // Another Admin approves a moment later, a day on.
     vi.setSystemTime(new Date("2026-11-10T12:00:00.000Z"));
     session.userId = seedUser("Mia Admin", schema.UserRole.Admin).id;
-    const result = await approve(refundRequest.id);
+    const result = approve(refundRequest.id);
 
-    expect(result).toMatchObject({
-      data: { error: "This Refund Request is already resolved." },
+    expect(await catchRefusal(result)).toMatchObject({
+      data: "This Refund Request is already resolved.",
       init: { status: 409 },
     });
     expect(findRefundRequest(refundRequest.id)).toMatchObject({
@@ -652,10 +669,10 @@ describe("declining a Refund Request", () => {
     loggedLines = [];
 
     session.userId = seedUser("Mia Admin", schema.UserRole.Admin).id;
-    const result = await decline(refundRequest.id, DECLINE_NOTE);
+    const result = decline(refundRequest.id, DECLINE_NOTE);
 
-    expect(result).toMatchObject({
-      data: { error: "This Refund Request is already resolved." },
+    expect(await catchRefusal(result)).toMatchObject({
+      data: "This Refund Request is already resolved.",
       init: { status: 409 },
     });
     expect(findRefundRequest(refundRequest.id)).toMatchObject({
@@ -673,12 +690,10 @@ describe("declining a Refund Request", () => {
     await decline(refundRequest.id, DECLINE_NOTE);
     loggedLines = [];
 
-    const result = await decline(refundRequest.id, "A different note.");
+    const result = decline(refundRequest.id, "A different note.");
 
-    expect(result).toMatchObject({ init: { status: 409 } });
-    expect(findRefundRequest(refundRequest.id)?.declineNote).toBe(
-      DECLINE_NOTE
-    );
+    expect(await expectRefusal(result)).toBe(409);
+    expect(findRefundRequest(refundRequest.id)?.declineNote).toBe(DECLINE_NOTE);
     expect(loggedLines).toEqual([]);
   });
 
@@ -694,9 +709,9 @@ describe("declining a Refund Request", () => {
       const { refundRequest } = seedOpenRefundRequest();
       session.userId = seedUser("Nora Nonadmin", role).id;
 
-      expect(
-        await expectRefusal(decline(refundRequest.id, DECLINE_NOTE))
-      ).toBe(403);
+      expect(await expectRefusal(decline(refundRequest.id, DECLINE_NOTE))).toBe(
+        403
+      );
       expect(findRefundRequest(refundRequest.id)?.status).toBe("requested");
       expect(loggedLines).toEqual([]);
     }

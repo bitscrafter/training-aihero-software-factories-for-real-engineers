@@ -23,7 +23,10 @@ import { Textarea } from "~/components/ui/textarea";
 export function meta() {
   return [
     { title: "Refund Requests — Cadence" },
-    { name: "description", content: "Review open and resolved Refund Requests" },
+    {
+      name: "description",
+      content: "Review open and resolved Refund Requests",
+    },
   ];
 }
 
@@ -36,9 +39,12 @@ async function requireAdmin(request: Request) {
   const currentUserId = await getCurrentUserId(request);
 
   if (!currentUserId) {
-    throw data("Select a user from the DevUI panel to review Refund Requests.", {
-      status: 401,
-    });
+    throw data(
+      "Select a user from the DevUI panel to review Refund Requests.",
+      {
+        status: 401,
+      }
+    );
   }
 
   const currentUser = getUserById(currentUserId);
@@ -93,10 +99,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (result.outcome === "alreadyResolved") {
-    return data(
-      { error: "This Refund Request is already resolved." },
-      { status: 409 }
-    );
+    throw data("This Refund Request is already resolved.", { status: 409 });
   }
 
   if (result.outcome === "approved") {
@@ -209,7 +212,6 @@ function ApproveRefundRequestButton({
   const fetcher = useFetcher<typeof action>();
   const amount = formatPrice(request.refundAmount);
   const firstName = request.learner.name.split(" ")[0];
-  const error = fetcher.data?.error;
 
   return (
     <fetcher.Form
@@ -226,7 +228,6 @@ function ApproveRefundRequestButton({
       <Button type="submit" size="sm" disabled={fetcher.state !== "idle"}>
         Approve {amount}
       </Button>
-      {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
     </fetcher.Form>
   );
 }
@@ -289,7 +290,10 @@ function OpenRefundRequestCard({ request }: { request: OpenRefundRequest }) {
               · {request.learner.email}
             </span>
           </div>
-          <div className="shrink-0 text-muted-foreground" suppressHydrationWarning>
+          <div
+            className="shrink-0 text-muted-foreground"
+            suppressHydrationWarning
+          >
             {formatRequestedAgo(request.requestedAt)}
           </div>
         </div>
@@ -303,8 +307,7 @@ function OpenRefundRequestCard({ request }: { request: OpenRefundRequest }) {
         </div>
         <div className="text-muted-foreground">
           Watched {formatWatchTime(request.secondsWatched)} ·{" "}
-          {request.lessonsCompleted} of {request.totalLessons} lessons
-          completed
+          {request.lessonsCompleted} of {request.totalLessons} lessons completed
         </div>
         <blockquote className="pt-1 italic">"{request.reason}"</blockquote>
         <div className="flex items-start gap-2 pt-2">
@@ -418,8 +421,16 @@ export default function AdminRefundRequests({
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let title = "Something went wrong";
   let message = "An unexpected error occurred while loading Refund Requests.";
+  // Signed-out and non-Admin visitors go home; an Admin goes back to the list.
+  let backLink = {
+    to: "/admin/refund-requests",
+    label: "Back to Refund Requests",
+  };
 
   if (isRouteErrorResponse(error)) {
+    if (error.status === 401 || error.status === 403) {
+      backLink = { to: "/", label: "Go Home" };
+    }
     if (error.status === 401) {
       title = "Sign in required";
       message =
@@ -432,6 +443,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         typeof error.data === "string"
           ? error.data
           : "Only Admins can access this page.";
+    } else if (error.status === 409) {
+      title = "Already resolved";
+      message =
+        typeof error.data === "string"
+          ? error.data
+          : "This Refund Request is already resolved.";
     } else {
       title = `Error ${error.status}`;
       message = typeof error.data === "string" ? error.data : error.statusText;
@@ -444,8 +461,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         <AlertTriangle className="mx-auto mb-4 size-12 text-muted-foreground" />
         <h1 className="mb-2 text-2xl font-bold">{title}</h1>
         <p className="mb-6 text-muted-foreground">{message}</p>
-        <Link to="/">
-          <Button>Go Home</Button>
+        <Link to={backLink.to}>
+          <Button>{backLink.label}</Button>
         </Link>
       </div>
     </div>
