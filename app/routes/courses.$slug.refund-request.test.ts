@@ -117,23 +117,23 @@ function seedEligibleLearner(
   return { course, learner, purchase };
 }
 
-function storedRefunds() {
-  return db.select().from(schema.refunds).all();
+function storedRefundRequests() {
+  return db.select().from(schema.refundRequests).all();
 }
 
 async function requestRefund(
   slug = "testing-things",
   reason = "The course was not what I expected."
 ) {
-  const { action } = await import("./courses.$slug.refund");
+  const { action } = await import("./courses.$slug.refund-request");
   const body = new FormData();
   body.set("reason", reason);
-  const url = new URL(`http://localhost/courses/${slug}/refund`);
+  const url = new URL(`http://localhost/courses/${slug}/refund-request`);
   const request = new Request(url, { method: "POST", body });
   return action({
     request,
     url,
-    pattern: "/courses/:slug/refund",
+    pattern: "/courses/:slug/refund-request",
     params: { slug },
     context: new RouterContextProvider(),
   });
@@ -178,7 +178,7 @@ describe("requesting a refund", () => {
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/settings");
 
-    expect(storedRefunds()).toEqual([
+    expect(storedRefundRequests()).toEqual([
       expect.objectContaining({
         purchaseId: purchase.id,
         status: "requested",
@@ -188,8 +188,9 @@ describe("requesting a refund", () => {
 
     const logged = loggedLines.join("\n");
     expect(logged).toContain("to=lena@example.com");
+    expect(logged).toContain("subject=Refund request received: Testing Things");
     expect(logged).toContain(
-      "The Reversal is for $49.00, the amount you paid."
+      "The refund request is for $49.00, the amount you paid."
     );
   });
 
@@ -202,7 +203,7 @@ describe("requesting a refund", () => {
     await requestRefund();
 
     expect(loggedLines.join("\n")).toContain(
-      "The Reversal is for $24.50, the amount you paid."
+      "The refund request is for $24.50, the amount you paid."
     );
   });
 
@@ -212,9 +213,9 @@ describe("requesting a refund", () => {
 
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 401,
-      message: "You must be logged in to cancel a purchase.",
+      message: "You must be logged in to request a refund.",
     });
-    expect(storedRefunds()).toEqual([]);
+    expect(storedRefundRequests()).toEqual([]);
   });
 
   it("refuses a course that does not exist", async () => {
@@ -224,7 +225,7 @@ describe("requesting a refund", () => {
       status: 404,
       message: "Course not found",
     });
-    expect(storedRefunds()).toEqual([]);
+    expect(storedRefundRequests()).toEqual([]);
   });
 
   it("refuses a learner who has not bought the course", async () => {
@@ -236,7 +237,7 @@ describe("requesting a refund", () => {
       status: 403,
       message: "You have not bought this course.",
     });
-    expect(storedRefunds()).toEqual([]);
+    expect(storedRefundRequests()).toEqual([]);
   });
 
   it("refuses a claimed team seat", async () => {
@@ -257,7 +258,7 @@ describe("requesting a refund", () => {
       status: 403,
       message: "A claimed team seat cannot be refunded.",
     });
-    expect(storedRefunds()).toEqual([]);
+    expect(storedRefundRequests()).toEqual([]);
   });
 
   it("accepts a purchase whose team seat has not been claimed yet", async () => {
@@ -274,7 +275,7 @@ describe("requesting a refund", () => {
 
     await requestRefund();
 
-    expect(storedRefunds()).toHaveLength(1);
+    expect(storedRefundRequests()).toHaveLength(1);
   });
 
   it("accepts a request on the fourteenth day after purchase", async () => {
@@ -284,7 +285,7 @@ describe("requesting a refund", () => {
 
     await requestRefund();
 
-    expect(storedRefunds()).toHaveLength(1);
+    expect(storedRefundRequests()).toHaveLength(1);
   });
 
   it("refuses once the 14-day window has closed", async () => {
@@ -296,7 +297,7 @@ describe("requesting a refund", () => {
       status: 403,
       message: "The 14-day refund window has closed.",
     });
-    expect(storedRefunds()).toEqual([]);
+    expect(storedRefundRequests()).toEqual([]);
   });
 
   it("refuses a learner who has watched 2 hours of the course", async () => {
@@ -334,7 +335,7 @@ describe("requesting a refund", () => {
       status: 403,
       message: "You have watched too much of this course to get a refund.",
     });
-    expect(storedRefunds()).toEqual([]);
+    expect(storedRefundRequests()).toEqual([]);
   });
 
   it("refuses a learner who has completed half the lessons", async () => {
@@ -368,7 +369,7 @@ describe("requesting a refund", () => {
       status: 403,
       message: "You have completed too much of this course to get a refund.",
     });
-    expect(storedRefunds()).toEqual([]);
+    expect(storedRefundRequests()).toEqual([]);
   });
 
   it("refuses on a date before the purchase day", async () => {
@@ -378,7 +379,7 @@ describe("requesting a refund", () => {
       status: 403,
       message: "The 14-day refund window has closed.",
     });
-    expect(storedRefunds()).toEqual([]);
+    expect(storedRefundRequests()).toEqual([]);
   });
 
   it("refuses a second request while one is open, storing nothing more", async () => {
@@ -389,7 +390,7 @@ describe("requesting a refund", () => {
       status: 409,
       message: "You already have a request open on this purchase.",
     });
-    expect(storedRefunds()).toHaveLength(1);
+    expect(storedRefundRequests()).toHaveLength(1);
   });
 
   it("refuses a reason that is too short, storing nothing", async () => {
@@ -401,12 +402,12 @@ describe("requesting a refund", () => {
       expect.objectContaining({
         data: {
           errors: {
-            reason: "Tell us a little more about why you want to cancel.",
+            reason: "Tell us a little more about why you want a refund.",
           },
         },
         init: { status: 400 },
       })
     );
-    expect(storedRefunds()).toEqual([]);
+    expect(storedRefundRequests()).toEqual([]);
   });
 });

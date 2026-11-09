@@ -7,8 +7,8 @@ import {
   LessonProgressStatus,
   modules,
   purchases,
-  refunds,
-  RefundStatus,
+  refundRequests,
+  RefundRequestStatus,
   videoWatchEvents,
 } from "~/db/schema";
 import { getDiscountForCountry } from "~/lib/ppp";
@@ -112,12 +112,12 @@ function isClaimedTeamSeat(purchaseId: number): boolean {
 
 function hasOpenRefundRequest(purchaseId: number): boolean {
   const open = db
-    .select({ id: refunds.id })
-    .from(refunds)
+    .select({ id: refundRequests.id })
+    .from(refundRequests)
     .where(
       and(
-        eq(refunds.purchaseId, purchaseId),
-        eq(refunds.status, RefundStatus.Requested)
+        eq(refundRequests.purchaseId, purchaseId),
+        eq(refundRequests.status, RefundRequestStatus.Requested)
       )
     )
     .get();
