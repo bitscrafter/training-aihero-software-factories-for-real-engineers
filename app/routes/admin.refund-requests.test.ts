@@ -572,3 +572,153 @@ describe("approving a Refund Request", () => {
     ]);
   });
 });
+
+// ─── Declining ───
+
+function decline(refundRequestId: number, note: string) {
+  return submitResolution({
+    intent: "decline",
+    refundRequestId: String(refundRequestId),
+    note,
+  });
+}
+
+const DECLINE_NOTE =
+  "You have completed most of the course, so this purchase isn't refundable.";
+
+describe("declining a Refund Request", () => {
+  beforeEach(captureLog);
+
+  it("records the decline: declined, the note, who declined it and when, and the Enrollment stays active", async () => {
+    const admin = signInAsAdmin();
+    const { ana, refundRequest } = seedOpenRefundRequest();
+
+    await decline(refundRequest.id, DECLINE_NOTE);
+
+    expect(findRefundRequest(refundRequest.id)).toMatchObject({
+      status: "declined",
+      declineNote: DECLINE_NOTE,
+      amountRefunded: null,
+      resolvedByUserId: admin.id,
+      resolvedAt: TODAY.toISOString(),
+    });
+    expect(enrollmentsOf(ana.id)).toEqual([
+      expect.objectContaining({ endedAt: null }),
+    ]);
+  });
+
+  it("emails the learner the Admin's note", async () => {
+    signInAsAdmin();
+    const { refundRequest } = seedOpenRefundRequest();
+
+    await decline(refundRequest.id, DECLINE_NOTE);
+
+    const logged = loggedLines.join("\n");
+    expect(logged).toContain("to=ana@example.com");
+    expect(logged).toContain(
+      "subject=Refund Request declined: Advanced TypeScript"
+    );
+    expect(logged).toContain(DECLINE_NOTE);
+  });
+
+  it.each(["", "   "])(
+    "requires a note, and changes nothing without one (note %j)",
+    async (note) => {
+      signInAsAdmin();
+      const { refundRequest } = seedOpenRefundRequest();
+
+      const result = await decline(refundRequest.id, note);
+
+      expect(result).toMatchObject({
+        data: { error: "Write a note to the learner." },
+        init: { status: 400 },
+      });
+      expect(findRefundRequest(refundRequest.id)).toMatchObject({
+        status: "requested",
+        declineNote: null,
+        resolvedAt: null,
+        resolvedByUserId: null,
+      });
+      expect(loggedLines).toEqual([]);
+    }
+  );
+
+  it("answers a decline of an approved request with a conflict, and no email", async () => {
+    const firstAdmin = signInAsAdmin();
+    const { ana, refundRequest } = seedOpenRefundRequest();
+    await approve(refundRequest.id);
+    const [endedEnrollment] = enrollmentsOf(ana.id);
+    loggedLines = [];
+
+    session.userId = seedUser("Mia Admin", schema.UserRole.Admin).id;
+    const result = await decline(refundRequest.id, DECLINE_NOTE);
+
+    expect(result).toMatchObject({
+      data: { error: "This Refund Request is already resolved." },
+      init: { status: 409 },
+    });
+    expect(findRefundRequest(refundRequest.id)).toMatchObject({
+      status: "approved",
+      declineNote: null,
+      resolvedByUserId: firstAdmin.id,
+    });
+    expect(enrollmentsOf(ana.id)).toEqual([endedEnrollment]);
+    expect(loggedLines).toEqual([]);
+  });
+
+  it("answers a second decline with a conflict, keeping the first note", async () => {
+    signInAsAdmin();
+    const { refundRequest } = seedOpenRefundRequest();
+    await decline(refundRequest.id, DECLINE_NOTE);
+    loggedLines = [];
+
+    const result = await decline(refundRequest.id, "A different note.");
+
+    expect(result).toMatchObject({ init: { status: 409 } });
+    expect(findRefundRequest(refundRequest.id)?.declineNote).toBe(
+      DECLINE_NOTE
+    );
+    expect(loggedLines).toEqual([]);
+  });
+
+  it("refuses a missing Refund Request with 404", async () => {
+    signInAsAdmin();
+
+    expect(await expectRefusal(decline(999, DECLINE_NOTE))).toBe(404);
+  });
+
+  it.each([schema.UserRole.Student, schema.UserRole.Instructor])(
+    "refuses a %s with 403 and leaves the request open",
+    async (role) => {
+      const { refundRequest } = seedOpenRefundRequest();
+      session.userId = seedUser("Nora Nonadmin", role).id;
+
+      expect(
+        await expectRefusal(decline(refundRequest.id, DECLINE_NOTE))
+      ).toBe(403);
+      expect(findRefundRequest(refundRequest.id)?.status).toBe("requested");
+      expect(loggedLines).toEqual([]);
+    }
+  );
+
+  it("moves the request from open to resolved on the screen, with its note", async () => {
+    signInAsAdmin();
+    const { refundRequest } = seedOpenRefundRequest();
+
+    await decline(refundRequest.id, DECLINE_NOTE);
+    const { open, resolved } = await loadRefundRequests();
+
+    expect(open).toEqual([]);
+    expect(resolved).toEqual([
+      expect.objectContaining({
+        id: refundRequest.id,
+        status: "declined",
+        learner: { name: "Ana Souza" },
+        refundAmount: null,
+        declineNote: DECLINE_NOTE,
+        resolvedBy: { name: "Luis Admin" },
+        resolvedAt: TODAY.toISOString(),
+      }),
+    ]);
+  });
+});

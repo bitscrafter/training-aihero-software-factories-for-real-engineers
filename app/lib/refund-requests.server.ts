@@ -61,7 +61,8 @@ const resolvers = alias(users, "resolvers");
 
 /**
  * Approved and declined Refund Requests, most recently resolved first, with
- * the Admin who resolved each. `refundAmount` is set on approved ones only.
+ * the Admin who resolved each. `refundAmount` is set on approved ones only,
+ * `declineNote` on declined ones only.
  */
 export function getResolvedRefundRequests() {
   return db
@@ -71,7 +72,7 @@ export function getResolvedRefundRequests() {
       learnerName: users.name,
       courseTitle: courses.title,
       refundAmount: refundRequests.amountRefunded,
-      // The decline note joins here once declining exists (#16).
+      declineNote: refundRequests.declineNote,
       resolvedAt: refundRequests.resolvedAt,
       resolvedByName: resolvers.name,
     })
@@ -89,6 +90,7 @@ export function getResolvedRefundRequests() {
       learner: { name: row.learnerName },
       courseTitle: row.courseTitle,
       refundAmount: row.refundAmount,
+      declineNote: row.declineNote,
       resolvedBy: row.resolvedByName ? { name: row.resolvedByName } : null,
       resolvedAt: row.resolvedAt,
     }));
@@ -169,6 +171,69 @@ export function approveRefundRequest(
     learner: { name: request.learnerName, email: request.learnerEmail },
     courseTitle: request.courseTitle,
     amountRefunded,
+  };
+}
+
+export type DeclineRefundRequestResult =
+  | { outcome: "notFound" }
+  | { outcome: "alreadyResolved" }
+  | {
+      outcome: "declined";
+      learner: { name: string; email: string };
+      courseTitle: string;
+      note: string;
+    };
+
+/**
+ * Declines an open Refund Request with the Admin's note to the learner,
+ * recording who declined it and when. The learner's Enrollment is untouched.
+ * A request that is no longer open is left untouched.
+ */
+export function declineRefundRequest(
+  refundRequestId: number,
+  adminUserId: number,
+  note: string
+): DeclineRefundRequestResult {
+  const request = db
+    .select({
+      learnerName: users.name,
+      learnerEmail: users.email,
+      courseTitle: courses.title,
+    })
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
+    .innerJoin(users, eq(purchases.userId, users.id))
+    .innerJoin(courses, eq(purchases.courseId, courses.id))
+    .where(eq(refundRequests.id, refundRequestId))
+    .get();
+
+  if (!request) return { outcome: "notFound" };
+
+  // Only an open request is declined, so two Admins acting at once can't both
+  // resolve it.
+  const { changes } = db
+    .update(refundRequests)
+    .set({
+      status: RefundRequestStatus.Declined,
+      declineNote: note,
+      resolvedAt: new Date().toISOString(),
+      resolvedByUserId: adminUserId,
+    })
+    .where(
+      and(
+        eq(refundRequests.id, refundRequestId),
+        eq(refundRequests.status, RefundRequestStatus.Requested)
+      )
+    )
+    .run();
+
+  if (changes === 0) return { outcome: "alreadyResolved" };
+
+  return {
+    outcome: "declined",
+    learner: { name: request.learnerName, email: request.learnerEmail },
+    courseTitle: request.courseTitle,
+    note,
   };
 }
 
