@@ -22,9 +22,9 @@ export type RefundEligibility =
   | { eligible: true; refundableAmount: number; lastDayOfWindow: string }
   | { eligible: false; failedRule: RefundRule; message: string };
 
-export const REFUND_WINDOW_DAYS = 14;
-export const MAX_WATCHED_SECONDS = 2 * 60 * 60;
-export const MAX_COMPLETED_SHARE = 0.5;
+const REFUND_WINDOW_DAYS = 14;
+const MAX_WATCHED_SECONDS = 2 * 60 * 60;
+const MAX_COMPLETED_SHARE = 0.5;
 
 // Whole local days as "YYYY-MM-DD", which compare correctly as strings.
 function calendarDay(when: Date): string {
