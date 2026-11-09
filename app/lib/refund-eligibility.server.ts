@@ -44,6 +44,7 @@ export function getRefundFacts(
       isClaimedTeamSeat: isClaimedTeamSeat(purchase.id),
       hasOpenRefundRequest: hasOpenRefundRequest(purchase.id),
       hasResolvedRefundRequest: hasResolvedRefundRequest(purchase.id),
+      approvedRefundCount: getApprovedRefundCount(userId, course.id),
     },
   };
 }
@@ -57,6 +58,29 @@ export function getRefundableAmountForPurchase(
   course: { price: number }
 ): number {
   return getRefundableAmount(getPriceFacts(purchase, course));
+}
+
+/**
+ * How many approved Refunds a learner has had for a course, across every
+ * purchase of it. Declined and open requests don't count.
+ */
+export function getApprovedRefundCount(
+  userId: number,
+  courseId: number
+): number {
+  const result = db
+    .select({ count: sql<number>`count(*)` })
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
+    .where(
+      and(
+        eq(purchases.userId, userId),
+        eq(purchases.courseId, courseId),
+        eq(refundRequests.status, RefundRequestStatus.Approved)
+      )
+    )
+    .get();
+  return result?.count ?? 0;
 }
 
 /**
