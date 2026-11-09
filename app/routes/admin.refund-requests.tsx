@@ -127,9 +127,31 @@ export async function action({ request }: Route.ActionArgs) {
   return { error: null };
 }
 
+type Email = { to: string; subject: string; body: string };
+
 // There is no mail transport wired up yet, so built emails go to the server log.
-function logEmail(email: { to: string; subject: string; body: string }) {
+function logEmail(email: Email) {
   console.log(`[email] to=${email.to} subject=${email.subject}\n${email.body}`);
+}
+
+/** A learner email: the greeting, the given paragraphs, and the sign-off. */
+function buildLearnerEmail(input: {
+  learnerName: string;
+  learnerEmail: string;
+  subject: string;
+  paragraphs: string[][];
+}): Email {
+  return {
+    to: input.learnerEmail,
+    subject: input.subject,
+    body: [
+      [`Hi ${input.learnerName},`],
+      ...input.paragraphs,
+      ["— The Cadence team"],
+    ]
+      .map((lines) => lines.join("\n"))
+      .join("\n\n"),
+  };
 }
 
 /** The email a learner gets when their Refund Request is declined. */
@@ -139,47 +161,40 @@ function buildRefundDeclinedEmail(input: {
   courseTitle: string;
   note: string;
 }) {
-  return {
-    to: input.learnerEmail,
+  return buildLearnerEmail({
+    ...input,
     subject: `Refund Request declined: ${input.courseTitle}`,
-    body: [
-      `Hi ${input.learnerName},`,
-      "",
-      `We have declined your refund request for "${input.courseTitle}".`,
-      "Here is the note from our team:",
-      "",
-      input.note,
-      "",
-      "— The Cadence team",
-    ].join("\n"),
-  };
+    paragraphs: [
+      [
+        `We have declined your Refund Request for "${input.courseTitle}".`,
+        "Here is the note from the Admin who reviewed it:",
+      ],
+      [input.note],
+    ],
+  });
 }
 
-/**
- * The email a learner gets when their Refund Request is approved. There is no
- * mail transport wired up yet, so the built message goes to the server log.
- */
+/** The email a learner gets when their Refund Request is approved. */
 function buildRefundApprovedEmail(input: {
   learnerName: string;
   learnerEmail: string;
   courseTitle: string;
   amount: number;
 }) {
-  return {
-    to: input.learnerEmail,
+  return buildLearnerEmail({
+    ...input,
     subject: `Refund approved: ${input.courseTitle}`,
-    body: [
-      `Hi ${input.learnerName},`,
-      "",
-      `We have approved your refund request for "${input.courseTitle}".`,
-      `Your Refund is ${formatPrice(input.amount)}.`,
-      `Your access to "${input.courseTitle}" has ended.`,
-      "",
-      "We return the money to you outside Cadence, so you will not see it in your Cadence account.",
-      "",
-      "— The Cadence team",
-    ].join("\n"),
-  };
+    paragraphs: [
+      [
+        `We have approved your Refund Request for "${input.courseTitle}".`,
+        `Your Refund is ${formatPrice(input.amount)}.`,
+        `Your access to "${input.courseTitle}" has ended.`,
+      ],
+      [
+        "We return the money to you outside Cadence, so you will not see it in your Cadence account.",
+      ],
+    ],
+  });
 }
 
 // "YYYY-MM-DD" from an ISO timestamp.

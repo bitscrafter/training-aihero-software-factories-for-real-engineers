@@ -507,6 +507,9 @@ describe("approving a Refund Request", () => {
     const logged = loggedLines.join("\n");
     expect(logged).toContain("to=ana@example.com");
     expect(logged).toContain("subject=Refund approved: Advanced TypeScript");
+    expect(logged).toContain(
+      'We have approved your Refund Request for "Advanced TypeScript".'
+    );
     expect(logged).toContain("Your Refund is $49.00.");
     expect(logged).toContain('Your access to "Advanced TypeScript" has ended.');
     expect(logged).toContain("outside Cadence");
@@ -635,6 +638,10 @@ describe("declining a Refund Request", () => {
     expect(logged).toContain(
       "subject=Refund Request declined: Advanced TypeScript"
     );
+    expect(logged).toContain(
+      'We have declined your Refund Request for "Advanced TypeScript".'
+    );
+    expect(logged).toContain("the Admin who reviewed it");
     expect(logged).toContain(DECLINE_NOTE);
     expect(logged).not.toContain("access");
   });
