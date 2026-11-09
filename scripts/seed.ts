@@ -12,6 +12,7 @@ import {
   LessonProgressStatus,
   QuestionType,
   TeamMemberRole,
+  RefundRequestStatus,
 } from "../app/db/schema";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2724,6 +2725,132 @@ This course is still in draft while the cluster examples are rewritten against t
     []
   );
 
+  // ─── Refund Requests ───
+  // Four learners who each bought one course and asked for their money back:
+  // two are still open for an Admin to resolve, one was approved (a Refund, so
+  // their Enrollment has ended — kept, not deleted, per ADR 0001), and one was
+  // declined with a note to the learner.
+
+  function seedRefundRequest(input: {
+    name: string;
+    email: string;
+    course: { id: number; price: number };
+    purchasedDaysAgo: number;
+    requestedDaysAgo: number;
+    reason: string;
+    resolution?:
+      | { status: RefundRequestStatus.Approved; resolvedDaysAgo: number }
+      | {
+          status: RefundRequestStatus.Declined;
+          resolvedDaysAgo: number;
+          declineNote: string;
+        };
+  }) {
+    const [learner] = db
+      .insert(schema.users)
+      .values({
+        name: input.name,
+        email: input.email,
+        role: UserRole.Student,
+        createdAt: daysAgo(input.purchasedDaysAgo),
+      })
+      .returning()
+      .all();
+
+    const [purchase] = db
+      .insert(schema.purchases)
+      .values({
+        userId: learner.id,
+        courseId: input.course.id,
+        amountPaid: input.course.price,
+        country: "US",
+        createdAt: daysAgo(input.purchasedDaysAgo),
+      })
+      .returning()
+      .all();
+
+    const resolution = input.resolution;
+    db.insert(schema.enrollments)
+      .values({
+        userId: learner.id,
+        courseId: input.course.id,
+        enrolledAt: daysAgo(input.purchasedDaysAgo),
+        endedAt:
+          resolution?.status === RefundRequestStatus.Approved
+            ? daysAgo(resolution.resolvedDaysAgo)
+            : null,
+      })
+      .run();
+
+    db.insert(schema.refundRequests)
+      .values({
+        purchaseId: purchase.id,
+        reason: input.reason,
+        requestedAt: daysAgo(input.requestedDaysAgo),
+        status: resolution?.status ?? RefundRequestStatus.Requested,
+        amountRefunded:
+          resolution?.status === RefundRequestStatus.Approved
+            ? input.course.price
+            : null,
+        declineNote:
+          resolution?.status === RefundRequestStatus.Declined
+            ? resolution.declineNote
+            : null,
+        resolvedAt: resolution ? daysAgo(resolution.resolvedDaysAgo) : null,
+        resolvedByUserId: resolution ? admin.id : null,
+      })
+      .run();
+  }
+
+  seedRefundRequest({
+    name: "Priya Raman",
+    email: "priya.raman@student.dev",
+    course: course1,
+    purchasedDaysAgo: 6,
+    requestedDaysAgo: 2,
+    reason:
+      "I already know most of this from work. I was hoping for more advanced material.",
+  });
+
+  seedRefundRequest({
+    name: "Tomás Herrera",
+    email: "tomas.herrera@student.dev",
+    course: course2,
+    purchasedDaysAgo: 4,
+    requestedDaysAgo: 1,
+    reason: "My company bought me a team seat for this course the next day.",
+  });
+
+  seedRefundRequest({
+    name: "Grace Whitfield",
+    email: "grace.whitfield@student.dev",
+    course: course3,
+    purchasedDaysAgo: 12,
+    requestedDaysAgo: 10,
+    reason:
+      "The videos won't play on my work laptop and I can't install anything.",
+    resolution: { status: RefundRequestStatus.Approved, resolvedDaysAgo: 9 },
+  });
+
+  seedRefundRequest({
+    name: "Diego Alvarez",
+    email: "diego.alvarez@student.dev",
+    course: course1,
+    purchasedDaysAgo: 11,
+    requestedDaysAgo: 8,
+    reason: "Changed my mind.",
+    resolution: {
+      status: RefundRequestStatus.Declined,
+      resolvedDaysAgo: 7,
+      declineNote:
+        "We need a reason to refund a purchase, and a change of mind isn't one. If something in the course didn't work for you, reply and tell us what, and we'll look again.",
+    },
+  });
+
+  console.log(
+    `Created ${countRows(schema.refundRequests)} Refund Requests (${countRows(schema.refundRequests, eq(schema.refundRequests.status, RefundRequestStatus.Requested))} open).`
+  );
+
   // ─── Flush watch events ───
   // Batched: the heartbeat makes these by far the largest table, and one
   // statement per row would dominate the seed's runtime.
@@ -2774,6 +2901,9 @@ This course is still in draft while the cluster examples are rewritten against t
   );
   console.log(
     `  Purchases: ${countRows(schema.purchases)} (${countRows(schema.purchases, gte(schema.purchases.createdAt, sevenDaysAgo))} in the last 7 days), spanning ${historyDays} days`
+  );
+  console.log(
+    `  Refund Requests: ${countRows(schema.refundRequests)} (${countRows(schema.refundRequests, eq(schema.refundRequests.status, RefundRequestStatus.Requested))} open, ${countRows(schema.refundRequests, eq(schema.refundRequests.status, RefundRequestStatus.Approved))} approved, ${countRows(schema.refundRequests, eq(schema.refundRequests.status, RefundRequestStatus.Declined))} declined)`
   );
   console.log(
     `  Teams: ${countRows(schema.teams)}, coupons: ${countRows(schema.coupons)} (${countRows(schema.coupons, isNotNull(schema.coupons.redeemedByUserId))} redeemed)`

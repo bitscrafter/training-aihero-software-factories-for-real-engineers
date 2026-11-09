@@ -13,6 +13,7 @@ import {
   getOpenRefundRequests,
   getResolvedRefundRequests,
 } from "~/lib/refund-requests.server";
+import { REFUND_REQUEST_STATUS_LABELS } from "~/lib/refund-requests";
 import { parseFormData } from "~/lib/validation";
 import { daysSince, formatPrice } from "~/lib/utils";
 import { Card, CardContent } from "~/components/ui/card";
@@ -23,7 +24,10 @@ import { Textarea } from "~/components/ui/textarea";
 export function meta() {
   return [
     { title: "Refund Requests — Cadence" },
-    { name: "description", content: "Review open and resolved Refund Requests" },
+    {
+      name: "description",
+      content: "Review open and resolved Refund Requests",
+    },
   ];
 }
 
@@ -36,9 +40,12 @@ async function requireAdmin(request: Request) {
   const currentUserId = await getCurrentUserId(request);
 
   if (!currentUserId) {
-    throw data("Select a user from the DevUI panel to review Refund Requests.", {
-      status: 401,
-    });
+    throw data(
+      "Select a user from the DevUI panel to review Refund Requests.",
+      {
+        status: 401,
+      }
+    );
   }
 
   const currentUser = getUserById(currentUserId);
@@ -59,13 +66,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-const refundRequestId = z.coerce.number().int().positive();
+const refundRequestIdSchema = z.coerce.number().int().positive();
 
 const resolutionFormSchema = z.discriminatedUnion("intent", [
-  z.object({ intent: z.literal("approve"), refundRequestId }),
+  z.object({
+    intent: z.literal("approve"),
+    refundRequestId: refundRequestIdSchema,
+  }),
   z.object({
     intent: z.literal("decline"),
-    refundRequestId,
+    refundRequestId: refundRequestIdSchema,
     note: z.string().trim().min(1, "Write a note to the learner."),
   }),
 ]);
@@ -93,10 +103,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (result.outcome === "alreadyResolved") {
-    return data(
-      { error: "This Refund Request is already resolved." },
-      { status: 409 }
-    );
+    throw data("This Refund Request is already resolved.", { status: 409 });
   }
 
   if (result.outcome === "approved") {
@@ -124,9 +131,31 @@ export async function action({ request }: Route.ActionArgs) {
   return { error: null };
 }
 
+type Email = { to: string; subject: string; body: string };
+
 // There is no mail transport wired up yet, so built emails go to the server log.
-function logEmail(email: { to: string; subject: string; body: string }) {
+function logEmail(email: Email) {
   console.log(`[email] to=${email.to} subject=${email.subject}\n${email.body}`);
+}
+
+/** A learner email: the greeting, the given paragraphs, and the sign-off. */
+function buildLearnerEmail(input: {
+  learnerName: string;
+  learnerEmail: string;
+  subject: string;
+  paragraphs: string[][];
+}): Email {
+  return {
+    to: input.learnerEmail,
+    subject: input.subject,
+    body: [
+      [`Hi ${input.learnerName},`],
+      ...input.paragraphs,
+      ["— The Cadence team"],
+    ]
+      .map((lines) => lines.join("\n"))
+      .join("\n\n"),
+  };
 }
 
 /** The email a learner gets when their Refund Request is declined. */
@@ -136,49 +165,40 @@ function buildRefundDeclinedEmail(input: {
   courseTitle: string;
   note: string;
 }) {
-  return {
-    to: input.learnerEmail,
+  return buildLearnerEmail({
+    ...input,
     subject: `Refund Request declined: ${input.courseTitle}`,
-    body: [
-      `Hi ${input.learnerName},`,
-      "",
-      `We have declined your refund request for "${input.courseTitle}".`,
-      "Here is the note from our team:",
-      "",
-      input.note,
-      "",
-      `You still have access to "${input.courseTitle}".`,
-      "",
-      "— The Cadence team",
-    ].join("\n"),
-  };
+    paragraphs: [
+      [
+        `We have declined your Refund Request for "${input.courseTitle}".`,
+        "Here is the note from the Admin who reviewed it:",
+      ],
+      [input.note],
+    ],
+  });
 }
 
-/**
- * The email a learner gets when their Refund Request is approved. There is no
- * mail transport wired up yet, so the built message goes to the server log.
- */
+/** The email a learner gets when their Refund Request is approved. */
 function buildRefundApprovedEmail(input: {
   learnerName: string;
   learnerEmail: string;
   courseTitle: string;
   amount: number;
 }) {
-  return {
-    to: input.learnerEmail,
+  return buildLearnerEmail({
+    ...input,
     subject: `Refund approved: ${input.courseTitle}`,
-    body: [
-      `Hi ${input.learnerName},`,
-      "",
-      `We have approved your refund request for "${input.courseTitle}".`,
-      `Your Refund is ${formatPrice(input.amount)}.`,
-      `Your access to "${input.courseTitle}" has ended.`,
-      "",
-      "We return the money to you outside Cadence, so you will not see it in your Cadence account.",
-      "",
-      "— The Cadence team",
-    ].join("\n"),
-  };
+    paragraphs: [
+      [
+        `We have approved your Refund Request for "${input.courseTitle}".`,
+        `Your Refund is ${formatPrice(input.amount)}.`,
+        `Your access to "${input.courseTitle}" has ended.`,
+      ],
+      [
+        "We return the money to you outside Cadence, so you will not see it in your Cadence account.",
+      ],
+    ],
+  });
 }
 
 // "YYYY-MM-DD" from an ISO timestamp.
@@ -211,7 +231,6 @@ function ApproveRefundRequestButton({
   const fetcher = useFetcher<typeof action>();
   const amount = formatPrice(request.refundAmount);
   const firstName = request.learner.name.split(" ")[0];
-  const error = fetcher.data?.error;
 
   return (
     <fetcher.Form
@@ -228,7 +247,6 @@ function ApproveRefundRequestButton({
       <Button type="submit" size="sm" disabled={fetcher.state !== "idle"}>
         Approve {amount}
       </Button>
-      {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
     </fetcher.Form>
   );
 }
@@ -291,7 +309,10 @@ function OpenRefundRequestCard({ request }: { request: OpenRefundRequest }) {
               · {request.learner.email}
             </span>
           </div>
-          <div className="shrink-0 text-muted-foreground" suppressHydrationWarning>
+          <div
+            className="shrink-0 text-muted-foreground"
+            suppressHydrationWarning
+          >
             {formatRequestedAgo(request.requestedAt)}
           </div>
         </div>
@@ -305,8 +326,7 @@ function OpenRefundRequestCard({ request }: { request: OpenRefundRequest }) {
         </div>
         <div className="text-muted-foreground">
           Watched {formatWatchTime(request.secondsWatched)} ·{" "}
-          {request.lessonsCompleted} of {request.totalLessons} lessons
-          completed
+          {request.lessonsCompleted} of {request.totalLessons} lessons completed
         </div>
         <blockquote className="pt-1 italic">"{request.reason}"</blockquote>
         <div className="flex items-start gap-2 pt-2">
@@ -344,7 +364,7 @@ function ResolvedRefundRequestRow({
     <li className="flex items-baseline justify-between gap-4 py-2 text-sm">
       <div>
         <span className="mr-3 inline-block w-20 font-medium">
-          {approved ? "Approved" : "Declined"}
+          {REFUND_REQUEST_STATUS_LABELS[request.status]}
         </span>
         {request.learner.name} · {request.courseTitle}
         {approved && request.refundAmount !== null && (
@@ -420,8 +440,16 @@ export default function AdminRefundRequests({
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let title = "Something went wrong";
   let message = "An unexpected error occurred while loading Refund Requests.";
+  // Signed-out and non-Admin visitors go home; an Admin goes back to the list.
+  let backLink = {
+    to: "/admin/refund-requests",
+    label: "Back to Refund Requests",
+  };
 
   if (isRouteErrorResponse(error)) {
+    if (error.status === 401 || error.status === 403) {
+      backLink = { to: "/", label: "Go Home" };
+    }
     if (error.status === 401) {
       title = "Sign in required";
       message =
@@ -434,6 +462,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         typeof error.data === "string"
           ? error.data
           : "Only Admins can access this page.";
+    } else if (error.status === 409) {
+      title = "Already resolved";
+      message =
+        typeof error.data === "string"
+          ? error.data
+          : "This Refund Request is already resolved.";
     } else {
       title = `Error ${error.status}`;
       message = typeof error.data === "string" ? error.data : error.statusText;
@@ -446,8 +480,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         <AlertTriangle className="mx-auto mb-4 size-12 text-muted-foreground" />
         <h1 className="mb-2 text-2xl font-bold">{title}</h1>
         <p className="mb-6 text-muted-foreground">{message}</p>
-        <Link to="/">
-          <Button>Go Home</Button>
+        <Link to={backLink.to}>
+          <Button>{backLink.label}</Button>
         </Link>
       </div>
     </div>

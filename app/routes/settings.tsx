@@ -23,6 +23,7 @@ import { data, isRouteErrorResponse, Link } from "react-router";
 import { db } from "~/db";
 import { desc, eq } from "drizzle-orm";
 import { formatPrice } from "~/lib/utils";
+import { REFUND_REQUEST_STATUS_LABELS } from "~/lib/refund-requests";
 
 const settingsSchema = z.object({
   name: z.string().trim().min(1, "Name cannot be empty."),
@@ -113,8 +114,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   const { name, bio } = parsed.data;
 
-  db
-    .update(users)
+  db.update(users)
     .set({ name, email: currentUser.email, bio: bio || null })
     .where(eq(users.id, currentUser.id))
     .returning()
@@ -132,7 +132,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
       toast.success("Profile updated successfully.");
     }
     if (fetcher.state === "idle" && fetcher.data?.errors) {
-      const firstError = Object.values(fetcher.data.errors)[0] as string | undefined;
+      const firstError = Object.values(fetcher.data.errors)[0] as
+        string | undefined;
       if (firstError) toast.error(firstError);
     }
   }, [fetcher.state, fetcher.data]);
@@ -200,10 +201,7 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                 </p>
               </div>
             )}
-            <Button
-              type="submit"
-              disabled={fetcher.state !== "idle"}
-            >
+            <Button type="submit" disabled={fetcher.state !== "idle"}>
               {fetcher.state !== "idle" ? "Saving..." : "Save Changes"}
             </Button>
           </fetcher.Form>
@@ -266,33 +264,21 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
   );
 }
 
-const STATUS_BADGES: Record<
-  RefundRequestStatus,
-  { label: string; className: string }
-> = {
-  [RefundRequestStatus.Requested]: {
-    label: "Pending",
-    className:
-      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  },
-  [RefundRequestStatus.Approved]: {
-    label: "Approved",
-    className:
-      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  },
-  [RefundRequestStatus.Declined]: {
-    label: "Declined",
-    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  },
+const STATUS_BADGE_CLASSES: Record<RefundRequestStatus, string> = {
+  [RefundRequestStatus.Requested]:
+    "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  [RefundRequestStatus.Approved]:
+    "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  [RefundRequestStatus.Declined]:
+    "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
 };
 
 function RefundRequestStatusBadge({ status }: { status: RefundRequestStatus }) {
-  const badge = STATUS_BADGES[status];
   return (
     <span
-      className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}
+      className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE_CLASSES[status]}`}
     >
-      {badge.label}
+      {REFUND_REQUEST_STATUS_LABELS[status]}
     </span>
   );
 }
@@ -310,12 +296,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           : "Please select a user from the DevUI panel.";
     } else if (error.status === 404) {
       title = "User not found";
-      message =
-        typeof error.data === "string" ? error.data : "User not found.";
+      message = typeof error.data === "string" ? error.data : "User not found.";
     } else {
       title = `Error ${error.status}`;
-      message =
-        typeof error.data === "string" ? error.data : error.statusText;
+      message = typeof error.data === "string" ? error.data : error.statusText;
     }
   }
 

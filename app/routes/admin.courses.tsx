@@ -15,7 +15,8 @@ import {
   users,
 } from "~/db/schema";
 import { db } from "~/db";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
+import { isActiveEnrollment } from "~/lib/enrollment.server";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -68,7 +69,7 @@ function getEnrollmentCountForCourse(courseId: number) {
     .select({ count: sql<number>`count(*)` })
     .from(enrollments)
     .where(
-      and(eq(enrollments.courseId, courseId), isNull(enrollments.endedAt))
+      and(eq(enrollments.courseId, courseId), isActiveEnrollment())
     )
     .get();
 

@@ -23,7 +23,8 @@ import {
   quizzes,
   quizAttempts,
 } from "~/db/schema";
-import { eq, and, or, sql, desc, gt, gte, isNull } from "drizzle-orm";
+import { eq, and, or, sql, desc, gt, gte } from "drizzle-orm";
+import { isActiveEnrollment } from "~/lib/enrollment.server";
 import { formatDuration, formatPrice } from "~/lib/utils";
 import { MonacoMarkdownEditor } from "~/components/monaco-markdown-editor";
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
@@ -361,7 +362,7 @@ function getEnrollmentCountForCourse(courseId: number) {
     .select({ count: sql<number>`count(*)` })
     .from(enrollments)
     .where(
-      and(eq(enrollments.courseId, courseId), isNull(enrollments.endedAt))
+      and(eq(enrollments.courseId, courseId), isActiveEnrollment())
     )
     .get();
 
@@ -378,7 +379,7 @@ function getCourseEnrolledStudents(courseId: number) {
     })
     .from(enrollments)
     .where(
-      and(eq(enrollments.courseId, courseId), isNull(enrollments.endedAt))
+      and(eq(enrollments.courseId, courseId), isActiveEnrollment())
     )
     .all();
 }

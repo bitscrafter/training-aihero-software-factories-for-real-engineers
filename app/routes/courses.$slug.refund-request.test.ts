@@ -565,7 +565,8 @@ function seedOtherCourse() {
     .select()
     .from(schema.courses)
     .where(eq(schema.courses.slug, "testing-things"))
-    .get()!;
+    .get();
+  if (!course) throw new Error("seedEligibleLearner adds testing-things");
   return db
     .insert(schema.courses)
     .values({

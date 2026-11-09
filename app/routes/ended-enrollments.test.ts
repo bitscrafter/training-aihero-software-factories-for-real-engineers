@@ -81,6 +81,12 @@ function seedEnrollment(userId: number, courseId: number, endedAt?: string) {
   db.insert(schema.enrollments).values({ userId, courseId, endedAt }).run();
 }
 
+function seedPurchase(userId: number, courseId: number) {
+  db.insert(schema.purchases)
+    .values({ userId, courseId, amountPaid: course.price, country: "US" })
+    .run();
+}
+
 function signInAs(user: User) {
   session.userId = user.id;
 }
@@ -174,7 +180,8 @@ describe("an instructor", () => {
   it("doesn't count an ended Enrollment, or its progress, in course analytics", async () => {
     const { loader } = await import("./instructor.analytics");
     signInAs(instructor);
-    const lesson = db.select().from(schema.lessons).get()!;
+    const lesson = db.select().from(schema.lessons).get();
+    if (!lesson) throw new Error("seedCourse adds a lesson");
     db.insert(schema.lessonProgress)
       .values({
         userId: refundedLearner.id,
@@ -204,6 +211,23 @@ describe("an instructor", () => {
     const page = await loader(loaderArgs("/instructor/analytics?range=all"));
 
     expect(page.audience.studentCount).toBe(1);
+  });
+
+  it("doesn't show a refunded top buyer as enrolled in analytics", async () => {
+    const { loader } = await import("./instructor.analytics");
+    signInAs(instructor);
+    seedPurchase(stayingLearner.id, course.id);
+    seedPurchase(refundedLearner.id, course.id);
+
+    const page = await loader(loaderArgs("/instructor/analytics?range=all"));
+
+    const enrolledByName = Object.fromEntries(
+      page.buyers.map((buyer) => [buyer.name, buyer.enrolled])
+    );
+    expect(enrolledByName).toEqual({
+      "Sam Stays": true,
+      "Rita Refunded": false,
+    });
   });
 });
 
