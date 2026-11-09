@@ -362,14 +362,21 @@ function getTopBuyers(
 
   const seatsByUser = new Map(seats.map((row) => [row.userId, row]));
 
-  // No range here: "never enrolled" is a fact about the person, not about the
-  // last thirty days.
+  // No range here: whether a buyer is enrolled now is a fact about the person,
+  // not about the last thirty days. An ended Enrollment (a Refund) doesn't
+  // count.
   const enrolled = new Set(
     db
       .selectDistinct({ userId: enrollments.userId })
       .from(enrollments)
       .innerJoin(courses, eq(enrollments.courseId, courses.id))
-      .where(and(inArray(enrollments.userId, buyerIds), ownedBy(instructorId)))
+      .where(
+        and(
+          inArray(enrollments.userId, buyerIds),
+          isNull(enrollments.endedAt),
+          ownedBy(instructorId)
+        )
+      )
       .all()
       .map((row) => row.userId)
   );
@@ -1158,7 +1165,7 @@ function TopBuyers({
                   bought a dozen seats and never opened the course is the very
                   person this table exists to surface. */}
               <div className="text-xs text-muted-foreground">
-                {buyer.enrolled ? "Enrolled" : "Never enrolled"}
+                {buyer.enrolled ? "Enrolled" : "Not enrolled"}
               </div>
             </td>
             <td className="py-3 text-right tabular-nums">
