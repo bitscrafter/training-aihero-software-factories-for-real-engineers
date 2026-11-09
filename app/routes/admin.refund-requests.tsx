@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { data, isRouteErrorResponse, Link, useFetcher } from "react-router";
 import { eq } from "drizzle-orm";
 import { AlertTriangle } from "lucide-react";
@@ -8,6 +9,7 @@ import { RefundRequestStatus, UserRole, users } from "~/db/schema";
 import { z } from "zod";
 import {
   approveRefundRequest,
+  declineRefundRequest,
   getOpenRefundRequests,
   getResolvedRefundRequests,
 } from "~/lib/refund-requests.server";
@@ -15,6 +17,8 @@ import { parseFormData } from "~/lib/validation";
 import { daysSince, formatPrice } from "~/lib/utils";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { Label } from "~/components/ui/label";
+import { Textarea } from "~/components/ui/textarea";
 
 export function meta() {
   return [
@@ -55,20 +59,34 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-const resolutionFormSchema = z.object({
-  intent: z.literal("approve"),
-  refundRequestId: z.coerce.number().int().positive(),
-});
+const refundRequestId = z.coerce.number().int().positive();
+
+const resolutionFormSchema = z.discriminatedUnion("intent", [
+  z.object({ intent: z.literal("approve"), refundRequestId }),
+  z.object({
+    intent: z.literal("decline"),
+    refundRequestId,
+    note: z.string().trim().min(1, "Write a note to the learner."),
+  }),
+]);
 
 export async function action({ request }: Route.ActionArgs) {
   const admin = await requireAdmin(request);
 
   const parsed = parseFormData(await request.formData(), resolutionFormSchema);
   if (!parsed.success) {
+    // A missing decline note is the one mistake an Admin can fix in the form.
+    if (parsed.errors.note) {
+      return data({ error: parsed.errors.note }, { status: 400 });
+    }
     throw data("Invalid form submission.", { status: 400 });
   }
 
-  const result = approveRefundRequest(parsed.data.refundRequestId, admin.id);
+  const form = parsed.data;
+  const result =
+    form.intent === "approve"
+      ? approveRefundRequest(form.refundRequestId, admin.id)
+      : declineRefundRequest(form.refundRequestId, admin.id, form.note);
 
   if (result.outcome === "notFound") {
     throw data("Refund Request not found.", { status: 404 });
@@ -82,18 +100,58 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (result.outcome === "approved") {
-    const email = buildRefundApprovedEmail({
-      learnerName: result.learner.name,
-      learnerEmail: result.learner.email,
-      courseTitle: result.courseTitle,
-      amount: result.amountRefunded,
-    });
-    console.log(
-      `[email] to=${email.to} subject=${email.subject}\n${email.body}`
+    logEmail(
+      buildRefundApprovedEmail({
+        learnerName: result.learner.name,
+        learnerEmail: result.learner.email,
+        courseTitle: result.courseTitle,
+        amount: result.amountRefunded,
+      })
+    );
+  }
+
+  if (result.outcome === "declined") {
+    logEmail(
+      buildRefundDeclinedEmail({
+        learnerName: result.learner.name,
+        learnerEmail: result.learner.email,
+        courseTitle: result.courseTitle,
+        note: result.note,
+      })
     );
   }
 
   return { error: null };
+}
+
+// There is no mail transport wired up yet, so built emails go to the server log.
+function logEmail(email: { to: string; subject: string; body: string }) {
+  console.log(`[email] to=${email.to} subject=${email.subject}\n${email.body}`);
+}
+
+/** The email a learner gets when their Refund Request is declined. */
+function buildRefundDeclinedEmail(input: {
+  learnerName: string;
+  learnerEmail: string;
+  courseTitle: string;
+  note: string;
+}) {
+  return {
+    to: input.learnerEmail,
+    subject: `Refund Request declined: ${input.courseTitle}`,
+    body: [
+      `Hi ${input.learnerName},`,
+      "",
+      `We have declined your refund request for "${input.courseTitle}".`,
+      "Here is the note from our team:",
+      "",
+      input.note,
+      "",
+      `You still have access to "${input.courseTitle}".`,
+      "",
+      "— The Cadence team",
+    ].join("\n"),
+  };
 }
 
 /**
@@ -175,7 +233,54 @@ function ApproveRefundRequestButton({
   );
 }
 
+/**
+ * "Decline…" opens an inline form for the note to the learner, which is
+ * required. Cancel closes it without changing anything.
+ */
+function DeclineRefundRequestForm({
+  request,
+  onCancel,
+}: {
+  request: OpenRefundRequest;
+  onCancel: () => void;
+}) {
+  const fetcher = useFetcher<typeof action>();
+  const noteId = `decline-note-${request.id}`;
+  const error = fetcher.data?.error;
+
+  return (
+    <fetcher.Form method="post" className="w-full space-y-2">
+      <input type="hidden" name="intent" value="decline" />
+      <input type="hidden" name="refundRequestId" value={request.id} />
+      <Label htmlFor={noteId}>Note to {request.learner.name}</Label>
+      <Textarea
+        id={noteId}
+        name="note"
+        required
+        rows={3}
+        placeholder="Explain why this Refund Request is declined."
+      />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <div className="flex gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          variant="destructive"
+          disabled={fetcher.state !== "idle"}
+        >
+          Decline Refund Request
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </fetcher.Form>
+  );
+}
+
 function OpenRefundRequestCard({ request }: { request: OpenRefundRequest }) {
+  const [declining, setDeclining] = useState(false);
+
   return (
     <Card>
       <CardContent className="space-y-1 p-4 text-sm">
@@ -204,9 +309,25 @@ function OpenRefundRequestCard({ request }: { request: OpenRefundRequest }) {
           completed
         </div>
         <blockquote className="pt-1 italic">"{request.reason}"</blockquote>
-        <div className="flex items-center gap-2 pt-2">
-          <ApproveRefundRequestButton request={request} />
-          {/* The Decline action arrives with #16. */}
+        <div className="flex items-start gap-2 pt-2">
+          {declining ? (
+            <DeclineRefundRequestForm
+              request={request}
+              onCancel={() => setDeclining(false)}
+            />
+          ) : (
+            <>
+              <ApproveRefundRequestButton request={request} />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setDeclining(true)}
+              >
+                Decline…
+              </Button>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -229,7 +350,11 @@ function ResolvedRefundRequestRow({
         {approved && request.refundAmount !== null && (
           <> · {formatPrice(request.refundAmount)}</>
         )}
-        {/* The decline note shows here once declining exists (#16). */}
+        {!approved && request.declineNote && (
+          <p className="mt-1 pl-23 whitespace-pre-line text-muted-foreground italic">
+            "{request.declineNote}"
+          </p>
+        )}
       </div>
       <div className="shrink-0 text-muted-foreground">
         by {request.resolvedBy?.name ?? "unknown"}
