@@ -21,7 +21,7 @@ import {
 import { AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse, Link } from "react-router";
 import { db } from "~/db";
-import { and, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { formatPrice } from "~/lib/utils";
 
 const settingsSchema = z.object({
@@ -55,24 +55,25 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("User not found.", { status: 404 });
   }
 
-  const pendingRefundRequests = db
+  // Every Refund Request the learner has made, newest first, with its outcome.
+  const learnerRefundRequests = db
     .select({
       id: refundRequests.id,
       courseTitle: courses.title,
       courseSlug: courses.slug,
       amountPaid: purchases.amountPaid,
       reason: refundRequests.reason,
+      status: refundRequests.status,
+      amountRefunded: refundRequests.amountRefunded,
+      declineNote: refundRequests.declineNote,
       requestedAt: refundRequests.requestedAt,
+      resolvedAt: refundRequests.resolvedAt,
     })
     .from(refundRequests)
     .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(
-      and(
-        eq(purchases.userId, currentUserId),
-        eq(refundRequests.status, RefundRequestStatus.Requested)
-      )
-    )
+    .where(eq(purchases.userId, currentUserId))
+    .orderBy(desc(refundRequests.requestedAt), desc(refundRequests.id))
     .all();
 
   return {
@@ -83,7 +84,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       bio: currentUser.bio,
       role: currentUser.role,
     },
-    pendingRefundRequests,
+    refundRequests: learnerRefundRequests,
   };
 }
 
@@ -122,7 +123,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { user, pendingRefundRequests } = loaderData;
+  const { user, refundRequests } = loaderData;
   const fetcher = useFetcher();
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -209,18 +210,16 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </CardContent>
       </Card>
 
-      {pendingRefundRequests.length > 0 && (
+      {refundRequests.length > 0 && (
         <Card className="mt-8 max-w-md">
           <CardHeader>
-            <h2 className="text-lg font-semibold">Pending refund requests</h2>
+            <h2 className="text-lg font-semibold">Refund Requests</h2>
             <p className="text-sm text-muted-foreground">
-              {pendingRefundRequests.length === 1
-                ? "One refund request is waiting on us."
-                : `${pendingRefundRequests.length} refund requests are waiting on us.`}
+              Every Refund Request you have made, and what came of it.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            {pendingRefundRequests.map((refundRequest) => (
+            {refundRequests.map((refundRequest) => (
               <div key={refundRequest.id} className="rounded-md border p-3">
                 <div className="flex items-start justify-between gap-3">
                   <Link
@@ -229,21 +228,72 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                   >
                     {refundRequest.courseTitle}
                   </Link>
-                  <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                    Pending
-                  </span>
+                  <RefundRequestStatusBadge status={refundRequest.status} />
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {formatPrice(refundRequest.amountPaid)} · raised{" "}
+                  {formatPrice(refundRequest.amountPaid)} · requested{" "}
                   {new Date(refundRequest.requestedAt).toLocaleDateString()}
+                  {refundRequest.resolvedAt && (
+                    <>
+                      {" "}
+                      · resolved{" "}
+                      {new Date(refundRequest.resolvedAt).toLocaleDateString()}
+                    </>
+                  )}
                 </p>
                 <p className="mt-2 text-sm">{refundRequest.reason}</p>
+                {refundRequest.status === RefundRequestStatus.Approved &&
+                  refundRequest.amountRefunded !== null && (
+                    <p className="mt-2 text-sm font-medium">
+                      Refund: {formatPrice(refundRequest.amountRefunded)}
+                    </p>
+                  )}
+                {refundRequest.status === RefundRequestStatus.Declined &&
+                  refundRequest.declineNote && (
+                    <div className="mt-2 rounded-md bg-muted p-2 text-sm">
+                      <p className="font-medium">Note from our team</p>
+                      <p className="whitespace-pre-line">
+                        {refundRequest.declineNote}
+                      </p>
+                    </div>
+                  )}
               </div>
             ))}
           </CardContent>
         </Card>
       )}
     </div>
+  );
+}
+
+const STATUS_BADGES: Record<
+  RefundRequestStatus,
+  { label: string; className: string }
+> = {
+  [RefundRequestStatus.Requested]: {
+    label: "Pending",
+    className:
+      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  },
+  [RefundRequestStatus.Approved]: {
+    label: "Approved",
+    className:
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  },
+  [RefundRequestStatus.Declined]: {
+    label: "Declined",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  },
+};
+
+function RefundRequestStatusBadge({ status }: { status: RefundRequestStatus }) {
+  const badge = STATUS_BADGES[status];
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}
+    >
+      {badge.label}
+    </span>
   );
 }
 
