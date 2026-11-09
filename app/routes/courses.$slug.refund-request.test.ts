@@ -189,9 +189,7 @@ describe("requesting a refund", () => {
     const logged = loggedLines.join("\n");
     expect(logged).toContain("to=lena@example.com");
     expect(logged).toContain("subject=Refund request received: Testing Things");
-    expect(logged).toContain(
-      "The refund request is for $49.00, the amount you paid."
-    );
+    expect(logged).toContain("If it is approved, your refund will be $49.00.");
   });
 
   it("refunds a purchasing-power purchase at the price the learner paid", async () => {
@@ -203,7 +201,7 @@ describe("requesting a refund", () => {
     await requestRefund();
 
     expect(loggedLines.join("\n")).toContain(
-      "The refund request is for $24.50, the amount you paid."
+      "If it is approved, your refund will be $24.50."
     );
   });
 

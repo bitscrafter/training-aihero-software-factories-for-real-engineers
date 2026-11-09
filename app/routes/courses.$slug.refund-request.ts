@@ -48,7 +48,7 @@ function buildRefundRequestEmail(input: {
       `Hi ${input.learnerName},`,
       "",
       `We have your refund request for "${input.courseTitle}".`,
-      `The refund request is for ${formatPrice(input.amount)}, the amount you paid.`,
+      `If it is approved, your refund will be ${formatPrice(input.amount)}.`,
       "",
       "Our team reviews every refund request by hand. You do not need to do anything else — we will email you again when it is done.",
       "",
