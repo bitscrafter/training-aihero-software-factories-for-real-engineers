@@ -14,50 +14,67 @@ import {
   getRefundableAmountForPurchase,
 } from "~/lib/refund-eligibility.server";
 
+const resolvers = alias(users, "resolvers");
+
 /**
- * Open Refund Requests, oldest first, each with what an Admin needs to decide
- * on it. `refundAmount` is what approval would record.
+ * Refund Requests with the purchase each is about, the learner who bought it,
+ * the course bought, and the Admin who resolved it (null while open).
  */
-export function getOpenRefundRequests() {
+function selectRefundRequests() {
   return db
     .select({
-      id: refundRequests.id,
-      reason: refundRequests.reason,
-      requestedAt: refundRequests.requestedAt,
-      learnerId: users.id,
-      learnerName: users.name,
-      learnerEmail: users.email,
-      courseId: courses.id,
-      courseTitle: courses.title,
-      coursePrice: courses.price,
-      purchasedAt: purchases.createdAt,
-      amountPaid: purchases.amountPaid,
-      country: purchases.country,
+      request: {
+        id: refundRequests.id,
+        status: refundRequests.status,
+        reason: refundRequests.reason,
+        requestedAt: refundRequests.requestedAt,
+        amountRefunded: refundRequests.amountRefunded,
+        declineNote: refundRequests.declineNote,
+        resolvedAt: refundRequests.resolvedAt,
+      },
+      purchase: {
+        createdAt: purchases.createdAt,
+        amountPaid: purchases.amountPaid,
+        country: purchases.country,
+      },
+      learner: { id: users.id, name: users.name, email: users.email },
+      course: { id: courses.id, title: courses.title, price: courses.price },
+      resolvedBy: { name: resolvers.name },
     })
     .from(refundRequests)
     .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
     .innerJoin(users, eq(purchases.userId, users.id))
     .innerJoin(courses, eq(purchases.courseId, courses.id))
+    .leftJoin(resolvers, eq(refundRequests.resolvedByUserId, resolvers.id));
+}
+
+function findRefundRequest(refundRequestId: number) {
+  return selectRefundRequests()
+    .where(eq(refundRequests.id, refundRequestId))
+    .get();
+}
+
+/**
+ * Open Refund Requests, oldest first, each with what an Admin needs to decide
+ * on it. `refundAmount` is what approval would record.
+ */
+export function getOpenRefundRequests() {
+  return selectRefundRequests()
     .where(eq(refundRequests.status, RefundRequestStatus.Requested))
     .orderBy(asc(refundRequests.requestedAt), asc(refundRequests.id))
     .all()
     .map((row) => ({
-      id: row.id,
-      learner: { name: row.learnerName, email: row.learnerEmail },
-      courseTitle: row.courseTitle,
-      requestedAt: row.requestedAt,
-      purchasedAt: row.purchasedAt,
-      amountPaid: row.amountPaid,
-      refundAmount: getRefundableAmountForPurchase(
-        { amountPaid: row.amountPaid, country: row.country },
-        { price: row.coursePrice }
-      ),
-      ...getCourseUsage(row.learnerId, row.courseId),
-      reason: row.reason,
+      id: row.request.id,
+      learner: { name: row.learner.name, email: row.learner.email },
+      courseTitle: row.course.title,
+      requestedAt: row.request.requestedAt,
+      purchasedAt: row.purchase.createdAt,
+      amountPaid: row.purchase.amountPaid,
+      refundAmount: getRefundableAmountForPurchase(row.purchase, row.course),
+      ...getCourseUsage(row.learner.id, row.course.id),
+      reason: row.request.reason,
     }));
 }
-
-const resolvers = alias(users, "resolvers");
 
 /**
  * Approved and declined Refund Requests, most recently resolved first, with
@@ -65,34 +82,19 @@ const resolvers = alias(users, "resolvers");
  * `declineNote` on declined ones only.
  */
 export function getResolvedRefundRequests() {
-  return db
-    .select({
-      id: refundRequests.id,
-      status: refundRequests.status,
-      learnerName: users.name,
-      courseTitle: courses.title,
-      refundAmount: refundRequests.amountRefunded,
-      declineNote: refundRequests.declineNote,
-      resolvedAt: refundRequests.resolvedAt,
-      resolvedByName: resolvers.name,
-    })
-    .from(refundRequests)
-    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
-    .innerJoin(users, eq(purchases.userId, users.id))
-    .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .leftJoin(resolvers, eq(refundRequests.resolvedByUserId, resolvers.id))
+  return selectRefundRequests()
     .where(ne(refundRequests.status, RefundRequestStatus.Requested))
     .orderBy(desc(refundRequests.resolvedAt), desc(refundRequests.id))
     .all()
     .map((row) => ({
-      id: row.id,
-      status: row.status,
-      learner: { name: row.learnerName },
-      courseTitle: row.courseTitle,
-      refundAmount: row.refundAmount,
-      declineNote: row.declineNote,
-      resolvedBy: row.resolvedByName ? { name: row.resolvedByName } : null,
-      resolvedAt: row.resolvedAt,
+      id: row.request.id,
+      status: row.request.status,
+      learner: { name: row.learner.name },
+      courseTitle: row.course.title,
+      refundAmount: row.request.amountRefunded,
+      declineNote: row.request.declineNote,
+      resolvedBy: row.resolvedBy,
+      resolvedAt: row.request.resolvedAt,
     }));
 }
 
@@ -115,61 +117,32 @@ export function approveRefundRequest(
   refundRequestId: number,
   adminUserId: number
 ): ApproveRefundRequestResult {
-  const request = db
-    .select({
-      learnerId: users.id,
-      learnerName: users.name,
-      learnerEmail: users.email,
-      courseId: courses.id,
-      courseTitle: courses.title,
-      coursePrice: courses.price,
-      amountPaid: purchases.amountPaid,
-      country: purchases.country,
-    })
-    .from(refundRequests)
-    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
-    .innerJoin(users, eq(purchases.userId, users.id))
-    .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(eq(refundRequests.id, refundRequestId))
-    .get();
+  const request = findRefundRequest(refundRequestId);
 
   if (!request) return { outcome: "notFound" };
 
   const amountRefunded = getRefundableAmountForPurchase(
-    { amountPaid: request.amountPaid, country: request.country },
-    { price: request.coursePrice }
+    request.purchase,
+    request.course
   );
 
   const approved = db.transaction((tx) => {
-    // Only an open request is approved, so two Admins acting at once can't
-    // both resolve it.
-    const { changes } = tx
-      .update(refundRequests)
-      .set({
-        status: RefundRequestStatus.Approved,
-        amountRefunded,
-        resolvedAt: new Date().toISOString(),
-        resolvedByUserId: adminUserId,
-      })
-      .where(
-        and(
-          eq(refundRequests.id, refundRequestId),
-          eq(refundRequests.status, RefundRequestStatus.Requested)
-        )
-      )
-      .run();
-    if (changes === 0) return false;
-
-    endEnrollment(request.learnerId, request.courseId, tx);
-    return true;
+    const resolved = resolveIfStillOpen(
+      refundRequestId,
+      adminUserId,
+      { status: RefundRequestStatus.Approved, amountRefunded },
+      tx
+    );
+    if (resolved) endEnrollment(request.learner.id, request.course.id, tx);
+    return resolved;
   });
 
   if (!approved) return { outcome: "alreadyResolved" };
 
   return {
     outcome: "approved",
-    learner: { name: request.learnerName, email: request.learnerEmail },
-    courseTitle: request.courseTitle,
+    learner: { name: request.learner.name, email: request.learner.email },
+    courseTitle: request.course.title,
     amountRefunded,
   };
 }
@@ -194,28 +167,45 @@ export function declineRefundRequest(
   adminUserId: number,
   note: string
 ): DeclineRefundRequestResult {
-  const request = db
-    .select({
-      learnerName: users.name,
-      learnerEmail: users.email,
-      courseTitle: courses.title,
-    })
-    .from(refundRequests)
-    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
-    .innerJoin(users, eq(purchases.userId, users.id))
-    .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(eq(refundRequests.id, refundRequestId))
-    .get();
+  const request = findRefundRequest(refundRequestId);
 
   if (!request) return { outcome: "notFound" };
 
-  // Only an open request is declined, so two Admins acting at once can't both
-  // resolve it.
-  const { changes } = db
+  const declined = resolveIfStillOpen(refundRequestId, adminUserId, {
+    status: RefundRequestStatus.Declined,
+    declineNote: note,
+  });
+
+  if (!declined) return { outcome: "alreadyResolved" };
+
+  return {
+    outcome: "declined",
+    learner: { name: request.learner.name, email: request.learner.email },
+    courseTitle: request.course.title,
+    note,
+  };
+}
+
+/** `db` itself, or the transaction handed to a `db.transaction` callback. */
+type Executor = Pick<typeof db, "update">;
+
+/**
+ * Records the resolution, with who resolved it and when, but only while the
+ * request is still open, so two Admins acting at once can't both resolve it.
+ * Returns whether it was resolved.
+ */
+function resolveIfStillOpen(
+  refundRequestId: number,
+  adminUserId: number,
+  resolution:
+    | { status: RefundRequestStatus.Approved; amountRefunded: number }
+    | { status: RefundRequestStatus.Declined; declineNote: string },
+  executor: Executor = db
+): boolean {
+  const { changes } = executor
     .update(refundRequests)
     .set({
-      status: RefundRequestStatus.Declined,
-      declineNote: note,
+      ...resolution,
       resolvedAt: new Date().toISOString(),
       resolvedByUserId: adminUserId,
     })
@@ -226,15 +216,7 @@ export function declineRefundRequest(
       )
     )
     .run();
-
-  if (changes === 0) return { outcome: "alreadyResolved" };
-
-  return {
-    outcome: "declined",
-    learner: { name: request.learnerName, email: request.learnerEmail },
-    courseTitle: request.courseTitle,
-    note,
-  };
+  return changes > 0;
 }
 
 export function countOpenRefundRequests(): number {
