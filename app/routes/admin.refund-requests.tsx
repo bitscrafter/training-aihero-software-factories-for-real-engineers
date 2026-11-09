@@ -66,13 +66,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-const refundRequestId = z.coerce.number().int().positive();
+const refundRequestIdSchema = z.coerce.number().int().positive();
 
 const resolutionFormSchema = z.discriminatedUnion("intent", [
-  z.object({ intent: z.literal("approve"), refundRequestId }),
+  z.object({
+    intent: z.literal("approve"),
+    refundRequestId: refundRequestIdSchema,
+  }),
   z.object({
     intent: z.literal("decline"),
-    refundRequestId,
+    refundRequestId: refundRequestIdSchema,
     note: z.string().trim().min(1, "Write a note to the learner."),
   }),
 ]);
