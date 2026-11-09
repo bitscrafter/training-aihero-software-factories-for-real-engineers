@@ -241,7 +241,12 @@ function getStudentRevenue(
     .from(enrollments)
     .innerJoin(courses, eq(enrollments.courseId, courses.id))
     .innerJoin(users, eq(users.id, enrollments.userId))
-    .where(scopeOn(enrollments.enrolledAt, instructorId, range))
+    .where(
+      and(
+        isNull(enrollments.endedAt),
+        scopeOn(enrollments.enrolledAt, instructorId, range)
+      )
+    )
     .orderBy(users.name)
     .all();
 
@@ -508,7 +513,9 @@ function getCourseProgressSummary(courseId: number): CourseProgressSummary {
         inArray(lessonProgress.lessonId, courseLessonIds(courseId))
       )
     )
-    .where(eq(enrollments.courseId, courseId))
+    .where(
+      and(eq(enrollments.courseId, courseId), isNull(enrollments.endedAt))
+    )
     .groupBy(enrollments.userId)
     .all();
 
@@ -546,7 +553,9 @@ function getCourseDropOff(courseId: number): CourseFunnel {
   const enrolled = db
     .select({ enrolledCount: countDistinct(enrollments.userId) })
     .from(enrollments)
-    .where(eq(enrollments.courseId, courseId))
+    .where(
+      and(eq(enrollments.courseId, courseId), isNull(enrollments.endedAt))
+    )
     .get();
 
   const enrolledCount = enrolled?.enrolledCount ?? 0;
@@ -583,7 +592,8 @@ function getCourseDropOff(courseId: number): CourseFunnel {
       enrollments,
       and(
         eq(enrollments.userId, lessonProgress.userId),
-        eq(enrollments.courseId, courseId)
+        eq(enrollments.courseId, courseId),
+        isNull(enrollments.endedAt)
       )
     )
     .where(

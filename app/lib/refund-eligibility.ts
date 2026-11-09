@@ -11,11 +11,14 @@ export type RefundFacts = {
   hasOpenRefundRequest: boolean;
   /** An earlier Refund Request on this purchase was approved or declined. */
   hasResolvedRefundRequest: boolean;
+  /** Approved Refunds this learner has had for this course, on any purchase. */
+  approvedRefundCount: number;
 };
 
 export type RefundRule =
   | "openRefundRequest"
   | "resolvedRefundRequest"
+  | "refundLimit"
   | "claimedTeamSeat"
   | "refundWindow"
   | "watchTime"
@@ -28,6 +31,7 @@ export type RefundEligibility =
 const REFUND_WINDOW_DAYS = 14;
 const MAX_WATCHED_SECONDS = 2 * 60 * 60;
 const MAX_COMPLETED_SHARE = 0.5;
+const MAX_APPROVED_REFUNDS_PER_COURSE = 3;
 
 // Whole local days as "YYYY-MM-DD", which compare correctly as strings.
 function calendarDay(when: Date): string {
@@ -54,6 +58,15 @@ function hasNoOpenRefundRequest(facts: RefundFacts): boolean {
 function hasNoResolvedRefundRequest(facts: RefundFacts): boolean {
   return !facts.hasResolvedRefundRequest;
 }
+
+// Only approved Refunds count, per learner per course. Declined requests don't.
+function isUnderRefundLimit(
+  facts: Pick<RefundFacts, "approvedRefundCount">
+): boolean {
+  return facts.approvedRefundCount < MAX_APPROVED_REFUNDS_PER_COURSE;
+}
+
+const REFUND_LIMIT_MESSAGE = `You have already had ${MAX_APPROVED_REFUNDS_PER_COURSE} Refunds for this course, so this purchase can't be refunded.`;
 
 // A seat bought on a team licence and since claimed belongs to the team; the
 // learner cannot hand it back on their own.
@@ -100,6 +113,11 @@ const RULES: ReadonlyArray<{
       "This purchase already had a Refund Request, and that decision is final.",
   },
   {
+    name: "refundLimit",
+    passes: isUnderRefundLimit,
+    message: REFUND_LIMIT_MESSAGE,
+  },
+  {
     name: "claimedTeamSeat",
     passes: isNotClaimedTeamSeat,
     message: "A claimed team seat cannot be refunded.",
@@ -137,6 +155,19 @@ export function getRefundableAmount(
   return facts.purchasingPowerDiscountApplied
     ? facts.amountPaid
     : facts.listPrice;
+}
+
+/**
+ * The warning for the purchase page, shown before buying, when a learner with
+ * this many approved Refunds for the course could not get one on a new
+ * purchase of it. Null below the Refund limit.
+ */
+export function getRefundLimitWarning(
+  approvedRefundCount: number
+): string | null {
+  return isUnderRefundLimit({ approvedRefundCount })
+    ? null
+    : REFUND_LIMIT_MESSAGE;
 }
 
 export function checkRefundEligibility(
