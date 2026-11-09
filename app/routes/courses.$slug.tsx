@@ -887,7 +887,8 @@ function RequestRefund({ slug, amount }: { slug: string; amount: number }) {
       <p className="mb-2 text-sm font-medium">Request a refund</p>
       <p className="mb-3 text-xs text-muted-foreground">
         We will send {formatPrice(amount)} back to the card you paid with, once
-        someone has read your note.
+        someone has read your note. If approved, you'll lose access to the
+        course.
       </p>
       <fetcher.Form
         method="post"

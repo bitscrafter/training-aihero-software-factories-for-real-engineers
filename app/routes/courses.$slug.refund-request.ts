@@ -14,6 +14,7 @@ import { parseFormData, parseParams } from "~/lib/validation";
 import { formatPrice } from "~/lib/utils";
 import { checkRefundEligibility } from "~/lib/refund-eligibility";
 import { getRefundFacts } from "~/lib/refund-eligibility.server";
+import { isEnrolled } from "~/lib/enrollment.server";
 
 const refundRequestParamsSchema = z.object({
   slug: z.string().min(1),
@@ -87,10 +88,22 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw data("You have not bought this course.", { status: 403 });
   }
 
+  // Matches the course page, which only offers the form to enrolled learners.
+  // A team buyer (no Enrollment of their own) or a refunded learner (ended
+  // Enrollment) is refused. Interim policy for team purchases until #8.
+  if (!isEnrolled(currentUserId, course.id)) {
+    throw data("You are not enrolled in this course.", { status: 403 });
+  }
+
   const eligibility = checkRefundEligibility(refundFacts.facts, new Date());
 
   if (!eligibility.eligible) {
-    const status = eligibility.failedRule === "openRefundRequest" ? 409 : 403;
+    // A purchase gets at most one Refund Request: asking again is a conflict.
+    const status =
+      eligibility.failedRule === "openRefundRequest" ||
+      eligibility.failedRule === "resolvedRefundRequest"
+        ? 409
+        : 403;
     throw data(eligibility.message, { status });
   }
 
