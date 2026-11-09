@@ -255,7 +255,7 @@ describe("requesting a refund", () => {
 
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 403,
-      message: "A claimed team seat cannot be cancelled.",
+      message: "A claimed team seat cannot be refunded.",
     });
     expect(storedRefunds()).toEqual([]);
   });
@@ -294,7 +294,7 @@ describe("requesting a refund", () => {
 
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 403,
-      message: "The 14-day window has closed.",
+      message: "The 14-day refund window has closed.",
     });
     expect(storedRefunds()).toEqual([]);
   });
@@ -332,7 +332,51 @@ describe("requesting a refund", () => {
 
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 403,
-      message: "You have watched too much of this course to cancel it.",
+      message: "You have watched too much of this course to get a refund.",
+    });
+    expect(storedRefunds()).toEqual([]);
+  });
+
+  it("refuses a learner who has completed half the lessons", async () => {
+    const { course, learner } = seedEligibleLearner();
+    const courseModule = db
+      .insert(schema.modules)
+      .values({ courseId: course.id, title: "Module 1", position: 1 })
+      .returning()
+      .get();
+    const [firstLesson] = [1, 2].map((position) =>
+      db
+        .insert(schema.lessons)
+        .values({
+          moduleId: courseModule.id,
+          title: `Lesson ${position}`,
+          position,
+        })
+        .returning()
+        .get()
+    );
+    db.insert(schema.lessonProgress)
+      .values({
+        userId: learner.id,
+        lessonId: firstLesson.id,
+        status: schema.LessonProgressStatus.Completed,
+        completedAt: PURCHASED_RECENTLY,
+      })
+      .run();
+
+    expect(await expectRefusal(requestRefund())).toEqual({
+      status: 403,
+      message: "You have completed too much of this course to get a refund.",
+    });
+    expect(storedRefunds()).toEqual([]);
+  });
+
+  it("refuses on a date before the purchase day", async () => {
+    seedEligibleLearner({ createdAt: "2026-03-11T12:00:00.000Z" });
+
+    expect(await expectRefusal(requestRefund())).toEqual({
+      status: 403,
+      message: "The 14-day refund window has closed.",
     });
     expect(storedRefunds()).toEqual([]);
   });
