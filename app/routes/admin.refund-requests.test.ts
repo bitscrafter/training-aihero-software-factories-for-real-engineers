@@ -619,6 +619,7 @@ describe("declining a Refund Request", () => {
       "subject=Refund Request declined: Advanced TypeScript"
     );
     expect(logged).toContain(DECLINE_NOTE);
+    expect(logged).not.toContain("access");
   });
 
   it.each(["", "   "])(

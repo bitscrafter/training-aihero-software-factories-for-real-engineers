@@ -147,8 +147,6 @@ function buildRefundDeclinedEmail(input: {
       "",
       input.note,
       "",
-      `You still have access to "${input.courseTitle}".`,
-      "",
       "— The Cadence team",
     ].join("\n"),
   };
