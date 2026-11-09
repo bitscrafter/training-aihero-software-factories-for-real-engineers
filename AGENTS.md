@@ -5,6 +5,10 @@ Do these checks in this order before you report a change to `app/` as complete:
 1. `npm run typecheck`
 2. `npm run test`
 
+## Branches
+
+Commit ticket work to a branch named `<issue-number>-<short-slug>`, e.g. `5-server-action-tests`. If `main` is checked out, create that branch before the first commit.
+
 ## When something breaks
 
 | Symptom                                         | Cause                                                                                                  |
