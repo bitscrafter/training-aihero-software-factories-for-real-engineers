@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import type { Route } from "./+types/courses.$slug.purchase";
 import { getCurrentUserId } from "~/lib/session";
+import { enroll, isEnrolled } from "~/lib/enrollment.server";
 import { db } from "~/db";
 import {
   courses,
@@ -118,19 +119,7 @@ function getLessonCountForCourse(courseId: number) {
   return count?.count ?? 0;
 }
 
-function findEnrollment(userId: number, courseId: number) {
-  return db
-    .select()
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
-}
 
-function isUserEnrolled(userId: number, courseId: number) {
-  return !!findEnrollment(userId, courseId);
-}
 
 function getEnrollmentCountForCourse(courseId: number) {
   const result = db
@@ -142,40 +131,6 @@ function getEnrollmentCountForCourse(courseId: number) {
   return result?.count ?? 0;
 }
 
-function enrollUser(
-  userId: number,
-  courseId: number,
-  sendEmail: boolean,
-  skipValidation: boolean
-) {
-  if (!skipValidation) {
-    const existing = findEnrollment(userId, courseId);
-    if (existing) {
-      throw new Error("User is already enrolled in this course");
-    }
-
-    const course = db
-      .select()
-      .from(courses)
-      .where(eq(courses.id, courseId))
-      .get();
-    if (!course) {
-      throw new Error("Course not found");
-    }
-  }
-
-  const enrollment = db
-    .insert(enrollments)
-    .values({ userId, courseId })
-    .returning()
-    .get();
-
-  if (sendEmail) {
-    // Would send welcome email here
-  }
-
-  return enrollment;
-}
 
 function createPurchase(
   userId: number,
@@ -296,7 +251,7 @@ export async function loader({ params, request, url }: Route.LoaderArgs) {
 
   const mode = url.searchParams.get("mode");
 
-  const enrolled = isUserEnrolled(currentUserId, course.id);
+  const enrolled = isEnrolled(currentUserId, course.id);
 
   if (enrolled && mode !== "team") {
     throw redirect(`/courses/${slug}?already_enrolled=1`);
@@ -364,11 +319,11 @@ export async function action({ params, request }: Route.ActionArgs) {
     : course.price;
 
   if (parsed.data.intent === "confirm-purchase") {
-    if (isUserEnrolled(currentUserId, course.id)) {
+    if (isEnrolled(currentUserId, course.id)) {
       throw redirect(`/courses/${slug}`);
     }
     createPurchase(currentUserId, course.id, pppPrice, country);
-    enrollUser(currentUserId, course.id, false, false);
+    enroll(currentUserId, course.id);
     throw redirect(`/courses/${slug}/welcome`);
   }
 
