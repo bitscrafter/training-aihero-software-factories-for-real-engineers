@@ -100,10 +100,19 @@ function seedPurchase(input: {
 }
 
 /** A learner, signed in, who bought the course recently and watched nothing. */
-function seedEligibleLearner() {
+function seedEligibleLearner(
+  purchaseOverrides: Pick<
+    Parameters<typeof seedPurchase>[0],
+    "amountPaid" | "country" | "createdAt"
+  > = {}
+) {
   const course = seedCourse();
   const learner = seedLearner();
-  const purchase = seedPurchase({ userId: learner.id, courseId: course.id });
+  const purchase = seedPurchase({
+    userId: learner.id,
+    courseId: course.id,
+    ...purchaseOverrides,
+  });
   session.userId = learner.id;
   return { course, learner, purchase };
 }
@@ -155,7 +164,12 @@ async function expectRefusal(promise: Promise<unknown>) {
 
 describe("requesting a refund", () => {
   it("stores an eligible learner's request, emails them, and sends them to settings", async () => {
-    const { purchase } = seedEligibleLearner();
+    // Paid less than list (say, with a coupon) at full purchasing power: the
+    // refund is the course's list price, not the amount paid.
+    const { purchase } = seedEligibleLearner({
+      amountPaid: 3900,
+      country: "US",
+    });
 
     const response = await requestRefund();
 
@@ -180,15 +194,10 @@ describe("requesting a refund", () => {
   });
 
   it("refunds a purchasing-power purchase at the price the learner paid", async () => {
-    const course = seedCourse(4900);
-    const learner = seedLearner();
-    seedPurchase({
-      userId: learner.id,
-      courseId: course.id,
+    seedEligibleLearner({
       amountPaid: 2450,
       country: "IN",
     });
-    session.userId = learner.id;
 
     await requestRefund();
 
@@ -269,14 +278,9 @@ describe("requesting a refund", () => {
   });
 
   it("accepts a request on the fourteenth day after purchase", async () => {
-    const course = seedCourse();
-    const learner = seedLearner();
-    seedPurchase({
-      userId: learner.id,
-      courseId: course.id,
+    seedEligibleLearner({
       createdAt: "2026-02-24T12:00:00.000Z",
     });
-    session.userId = learner.id;
 
     await requestRefund();
 
@@ -284,14 +288,9 @@ describe("requesting a refund", () => {
   });
 
   it("refuses once the 14-day window has closed", async () => {
-    const course = seedCourse();
-    const learner = seedLearner();
-    seedPurchase({
-      userId: learner.id,
-      courseId: course.id,
+    seedEligibleLearner({
       createdAt: "2026-02-23T12:00:00.000Z",
     });
-    session.userId = learner.id;
 
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 403,
