@@ -9,7 +9,7 @@ import { enrollments } from "~/db/schema";
 // An Enrollment with an "ended at" has had a Cancellation: it is kept, never
 // deleted, but no longer counts as enrolled (ADR 0001).
 //
-// Uses positional parameters (project convention).
+// Uses positional parameters.
 
 export type Enrollment = typeof enrollments.$inferSelect;
 
