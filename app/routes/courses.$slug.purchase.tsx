@@ -4,7 +4,11 @@ import { toast } from "sonner";
 import { z } from "zod";
 import type { Route } from "./+types/courses.$slug.purchase";
 import { getCurrentUserId } from "~/lib/session";
-import { enroll, isEnrolled } from "~/lib/enrollment.server";
+import {
+  enroll,
+  isActiveEnrollment,
+  isEnrolled,
+} from "~/lib/enrollment.server";
 import { db } from "~/db";
 import {
   courses,
@@ -20,7 +24,7 @@ import {
   CourseStatus,
   TeamMemberRole,
 } from "~/db/schema";
-import { eq, and, or, sql, isNull } from "drizzle-orm";
+import { eq, and, or, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -128,7 +132,7 @@ function getEnrollmentCountForCourse(courseId: number) {
     .select({ count: sql<number>`count(*)` })
     .from(enrollments)
     .where(
-      and(eq(enrollments.courseId, courseId), isNull(enrollments.endedAt))
+      and(eq(enrollments.courseId, courseId), isActiveEnrollment())
     )
     .get();
 

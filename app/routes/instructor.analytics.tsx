@@ -17,6 +17,7 @@ import {
   sql,
   sum,
 } from "drizzle-orm";
+import { isActiveEnrollment } from "~/lib/enrollment.server";
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { db } from "~/db";
 import {
@@ -243,7 +244,7 @@ function getStudentRevenue(
     .innerJoin(users, eq(users.id, enrollments.userId))
     .where(
       and(
-        isNull(enrollments.endedAt),
+        isActiveEnrollment(),
         scopeOn(enrollments.enrolledAt, instructorId, range)
       )
     )
@@ -373,7 +374,7 @@ function getTopBuyers(
       .where(
         and(
           inArray(enrollments.userId, buyerIds),
-          isNull(enrollments.endedAt),
+          isActiveEnrollment(),
           ownedBy(instructorId)
         )
       )
@@ -521,7 +522,7 @@ function getCourseProgressSummary(courseId: number): CourseProgressSummary {
       )
     )
     .where(
-      and(eq(enrollments.courseId, courseId), isNull(enrollments.endedAt))
+      and(eq(enrollments.courseId, courseId), isActiveEnrollment())
     )
     .groupBy(enrollments.userId)
     .all();
@@ -561,7 +562,7 @@ function getCourseDropOff(courseId: number): CourseFunnel {
     .select({ enrolledCount: countDistinct(enrollments.userId) })
     .from(enrollments)
     .where(
-      and(eq(enrollments.courseId, courseId), isNull(enrollments.endedAt))
+      and(eq(enrollments.courseId, courseId), isActiveEnrollment())
     )
     .get();
 
@@ -600,7 +601,7 @@ function getCourseDropOff(courseId: number): CourseFunnel {
       and(
         eq(enrollments.userId, lessonProgress.userId),
         eq(enrollments.courseId, courseId),
-        isNull(enrollments.endedAt)
+        isActiveEnrollment()
       )
     )
     .where(

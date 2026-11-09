@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, type SQL } from "drizzle-orm";
 import { db } from "~/db";
 import { enrollments } from "~/db/schema";
 
@@ -16,10 +16,27 @@ export type Enrollment = typeof enrollments.$inferSelect;
 /** `db` itself, or the transaction handed to a `db.transaction` callback. */
 type Executor = Pick<typeof db, "update">;
 
+/**
+ * The condition that keeps only active Enrollments, leaving out ended ones.
+ * Every query that lists or counts enrolled learners filters with it.
+ */
+export function isActiveEnrollment(): SQL {
+  return isNull(enrollments.endedAt);
+}
+
 /** The learner's active Enrollment in the course, if any. */
 export function findEnrollment(
   userId: number,
   courseId: number
+): Enrollment | undefined {
+  return lookUpEnrollment(userId, courseId, isActiveEnrollment());
+}
+
+/** The learner's Enrollment in the course, active or ended, if any. */
+function lookUpEnrollment(
+  userId: number,
+  courseId: number,
+  condition?: SQL
 ): Enrollment | undefined {
   return db
     .select()
@@ -28,7 +45,7 @@ export function findEnrollment(
       and(
         eq(enrollments.userId, userId),
         eq(enrollments.courseId, courseId),
-        isNull(enrollments.endedAt)
+        condition
       )
     )
     .get();
@@ -45,13 +62,7 @@ export function isEnrolled(userId: number, courseId: number): boolean {
  * first enrolled and when they completed the course (ADR 0001).
  */
 export function enroll(userId: number, courseId: number): Enrollment {
-  const existing = db
-    .select()
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
+  const existing = lookUpEnrollment(userId, courseId);
 
   if (!existing) {
     return db
@@ -86,7 +97,7 @@ export function endEnrollment(
       and(
         eq(enrollments.userId, userId),
         eq(enrollments.courseId, courseId),
-        isNull(enrollments.endedAt)
+        isActiveEnrollment()
       )
     )
     .run();

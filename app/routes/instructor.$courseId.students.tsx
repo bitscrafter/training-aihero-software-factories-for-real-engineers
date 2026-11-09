@@ -18,7 +18,8 @@ import {
   lessonProgress,
   LessonProgressStatus,
 } from "~/db/schema";
-import { eq, and, or, sql, desc, isNull } from "drizzle-orm";
+import { eq, and, or, sql, desc } from "drizzle-orm";
+import { isActiveEnrollment } from "~/lib/enrollment.server";
 
 function getUserById(id: number) {
   return db.select().from(users).where(eq(users.id, id)).get();
@@ -38,7 +39,7 @@ function getCourseEnrolledStudents(courseId: number) {
     })
     .from(enrollments)
     .where(
-      and(eq(enrollments.courseId, courseId), isNull(enrollments.endedAt))
+      and(eq(enrollments.courseId, courseId), isActiveEnrollment())
     )
     .all();
 }
