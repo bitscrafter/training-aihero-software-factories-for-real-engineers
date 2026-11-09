@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import path from "path";
+import { vi } from "vitest";
 import { fileURLToPath } from "url";
 import * as schema from "~/db/schema";
 
@@ -74,4 +75,17 @@ export function seedBaseData(testDb: ReturnType<typeof createTestDb>) {
     .get();
 
   return { user, instructor, category, course };
+}
+
+/**
+ * Points the app's own `~/db` at a fresh in-memory database, migrated with the
+ * real migrations. Call it in `beforeEach`, then import the module under test
+ * dynamically (`await import(...)`) so it binds to the new connection.
+ */
+export async function useFreshAppDatabase() {
+  vi.stubEnv("DATABASE_PATH", ":memory:");
+  vi.resetModules();
+  const { db, getSqlite } = await import("~/db");
+  migrate(drizzle(getSqlite()), { migrationsFolder });
+  return db;
 }
