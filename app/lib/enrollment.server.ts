@@ -41,14 +41,33 @@ export function isEnrolled(userId: number, courseId: number): boolean {
 /**
  * Enrolls the learner in the course. Enrolling someone who is already
  * enrolled returns their existing Enrollment rather than creating another.
+ * Enrolling someone whose Enrollment has ended reopens it, keeping when they
+ * first enrolled and when they completed the course (ADR 0001).
  */
-// TODO(#15): a learner whose Enrollment has ended is not found above, so this
-// inserts a second Enrollment for them. #15 reopens the ended one instead.
 export function enroll(userId: number, courseId: number): Enrollment {
-  const existing = findEnrollment(userId, courseId);
-  if (existing) return existing;
+  const existing = db
+    .select()
+    .from(enrollments)
+    .where(
+      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
+    )
+    .get();
 
-  return db.insert(enrollments).values({ userId, courseId }).returning().get();
+  if (!existing) {
+    return db
+      .insert(enrollments)
+      .values({ userId, courseId })
+      .returning()
+      .get();
+  }
+  if (existing.endedAt === null) return existing;
+
+  return db
+    .update(enrollments)
+    .set({ endedAt: null })
+    .where(eq(enrollments.id, existing.id))
+    .returning()
+    .get();
 }
 
 /**
