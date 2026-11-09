@@ -132,6 +132,9 @@ export const enrollments = sqliteTable(
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
     completedAt: text("completed_at"),
+    // Set by a Cancellation; null while the Enrollment is active. An ended
+    // Enrollment is kept, never deleted (ADR 0001).
+    endedAt: text("ended_at"),
   },
   (table) => [index("enrollments_course_idx").on(table.courseId)]
 );

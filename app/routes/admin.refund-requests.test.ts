@@ -130,11 +130,11 @@ async function loadRefundRequests() {
   });
 }
 
-/** Runs the loader, expecting it to throw a `data(...)` refusal. */
+/** Runs the loader or action, expecting it to throw a `data(...)` refusal. */
 async function expectRefusal(promise: Promise<unknown>) {
   const thrown = await promise.then(
     () => {
-      throw new Error("Expected the loader to refuse, but it succeeded");
+      throw new Error("Expected a refusal, but it succeeded");
     },
     (error: unknown) => error
   );
@@ -362,5 +362,213 @@ describe("the Refund Requests entry in the admin navigation", () => {
     const { openRefundRequestCount } = await loadAppLayout();
 
     expect(openRefundRequestCount).toBeNull();
+  });
+});
+
+// ─── Approving ───
+
+let loggedLines: string[];
+
+function captureLog() {
+  loggedLines = [];
+  vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+    loggedLines.push(String(line));
+  });
+}
+
+async function submitResolution(fields: Record<string, string>) {
+  const { action } = await import("./admin.refund-requests");
+  const url = new URL("http://localhost/admin/refund-requests");
+  return action({
+    request: new Request(url, {
+      method: "POST",
+      body: new URLSearchParams(fields),
+    }),
+    url,
+    pattern: "/admin/refund-requests",
+    params: {},
+    context: new RouterContextProvider(),
+  });
+}
+
+function approve(refundRequestId: number) {
+  return submitResolution({
+    intent: "approve",
+    refundRequestId: String(refundRequestId),
+  });
+}
+
+/** Ana bought Advanced TypeScript, is enrolled, and asked for a Refund. */
+function seedOpenRefundRequest(
+  input: { purchasedAt?: string; requestedAt?: string } = {}
+) {
+  const purchasedAt = input.purchasedAt ?? "2026-11-01T09:00:00.000Z";
+  const ana = seedUser("Ana Souza", schema.UserRole.Student);
+  const { course, lessonIds } = seedCourse("Advanced TypeScript", 4900, 2);
+  const purchase = seedPurchase({
+    userId: ana.id,
+    courseId: course.id,
+    amountPaid: 4900,
+    createdAt: purchasedAt,
+  });
+  db.insert(schema.enrollments)
+    .values({ userId: ana.id, courseId: course.id, enrolledAt: purchasedAt })
+    .run();
+  const refundRequest = seedRefundRequest({
+    purchaseId: purchase.id,
+    requestedAt: input.requestedAt ?? "2026-11-05T10:00:00.000Z",
+  });
+  return { ana, course, lessonIds, refundRequest };
+}
+
+function findRefundRequest(id: number) {
+  return db
+    .select()
+    .from(schema.refundRequests)
+    .all()
+    .find((row) => row.id === id);
+}
+
+function enrollmentsOf(userId: number) {
+  return db
+    .select()
+    .from(schema.enrollments)
+    .all()
+    .filter((row) => row.userId === userId);
+}
+
+describe("approving a Refund Request", () => {
+  beforeEach(captureLog);
+
+  it("records the Refund: approved, the Refundable Amount, who approved it and when", async () => {
+    const admin = signInAsAdmin();
+    const { refundRequest } = seedOpenRefundRequest();
+
+    await approve(refundRequest.id);
+
+    expect(findRefundRequest(refundRequest.id)).toMatchObject({
+      status: "approved",
+      amountRefunded: 4900,
+      resolvedByUserId: admin.id,
+      resolvedAt: TODAY.toISOString(),
+    });
+  });
+
+  it("ends the learner's Enrollment without deleting it, so they lose lesson access", async () => {
+    signInAsAdmin();
+    const { ana, course, refundRequest } = seedOpenRefundRequest();
+
+    await approve(refundRequest.id);
+
+    expect(enrollmentsOf(ana.id)).toEqual([
+      expect.objectContaining({
+        courseId: course.id,
+        enrolledAt: "2026-11-01T09:00:00.000Z",
+        endedAt: TODAY.toISOString(),
+      }),
+    ]);
+
+    session.userId = ana.id;
+    const { getAccess } = await import("~/lib/access.server");
+    const access = await getAccess(
+      new Request("http://localhost/courses/advanced-typescript"),
+      course.id
+    );
+    expect(access).toMatchObject({ enrolled: false, canViewContent: false });
+  });
+
+  it("emails the learner the Refund amount and that their access has ended", async () => {
+    signInAsAdmin();
+    const { refundRequest } = seedOpenRefundRequest();
+
+    await approve(refundRequest.id);
+
+    const logged = loggedLines.join("\n");
+    expect(logged).toContain("to=ana@example.com");
+    expect(logged).toContain(
+      "subject=Refund approved: Advanced TypeScript"
+    );
+    expect(logged).toContain("Your Refund is $49.00.");
+    expect(logged).toContain(
+      'Your access to "Advanced TypeScript" has ended.'
+    );
+    expect(logged).toContain("outside Cadence");
+  });
+
+  it("answers a second approval with a conflict, and no second email or Cancellation", async () => {
+    const firstAdmin = signInAsAdmin();
+    const { ana, refundRequest } = seedOpenRefundRequest();
+    await approve(refundRequest.id);
+    const [endedEnrollment] = enrollmentsOf(ana.id);
+    loggedLines = [];
+
+    // Another Admin approves a moment later, a day on.
+    vi.setSystemTime(new Date("2026-11-10T12:00:00.000Z"));
+    session.userId = seedUser("Mia Admin", schema.UserRole.Admin).id;
+    const result = await approve(refundRequest.id);
+
+    expect(result).toMatchObject({
+      data: { error: "This Refund Request is already resolved." },
+      init: { status: 409 },
+    });
+    expect(findRefundRequest(refundRequest.id)).toMatchObject({
+      resolvedByUserId: firstAdmin.id,
+      resolvedAt: TODAY.toISOString(),
+    });
+    expect(enrollmentsOf(ana.id)).toEqual([endedEnrollment]);
+    expect(loggedLines).toEqual([]);
+  });
+
+  it("approves after the learner's 14-day window has closed", async () => {
+    signInAsAdmin();
+    // Bought 30 days ago, asked on day 10, and only reviewed today.
+    const { refundRequest } = seedOpenRefundRequest({
+      purchasedAt: "2026-10-10T12:00:00.000Z",
+      requestedAt: "2026-10-20T12:00:00.000Z",
+    });
+
+    await approve(refundRequest.id);
+
+    expect(findRefundRequest(refundRequest.id)).toMatchObject({
+      status: "approved",
+      amountRefunded: 4900,
+    });
+  });
+
+  it("refuses a missing Refund Request with 404", async () => {
+    signInAsAdmin();
+
+    expect(await expectRefusal(approve(999))).toBe(404);
+  });
+
+  it.each([schema.UserRole.Student, schema.UserRole.Instructor])(
+    "refuses a %s with 403 and leaves the request open",
+    async (role) => {
+      const { refundRequest } = seedOpenRefundRequest();
+      session.userId = seedUser("Nora Nonadmin", role).id;
+
+      expect(await expectRefusal(approve(refundRequest.id))).toBe(403);
+      expect(findRefundRequest(refundRequest.id)?.status).toBe("requested");
+      expect(loggedLines).toEqual([]);
+    }
+  );
+
+  it("moves the request from open to resolved on the screen", async () => {
+    signInAsAdmin();
+    const { refundRequest } = seedOpenRefundRequest();
+
+    await approve(refundRequest.id);
+    const { open, resolved } = await loadRefundRequests();
+
+    expect(open).toEqual([]);
+    expect(resolved).toEqual([
+      expect.objectContaining({
+        id: refundRequest.id,
+        status: "approved",
+        learner: { name: "Ana Souza" },
+        refundAmount: 4900,
+        resolvedBy: { name: "Luis Admin" },
+      }),
+    ]);
   });
 });

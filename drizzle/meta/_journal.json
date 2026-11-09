@@ -78,6 +78,13 @@
       "when": 1794256054052,
       "tag": "0010_rename_refunds_to_refund_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794266601962,
+      "tag": "0011_enrollment_ended_at",
+      "breakpoints": true
     }
   ]
 }
