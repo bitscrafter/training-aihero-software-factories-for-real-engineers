@@ -13,6 +13,7 @@ import {
   getOpenRefundRequests,
   getResolvedRefundRequests,
 } from "~/lib/refund-requests.server";
+import { REFUND_REQUEST_STATUS_LABELS } from "~/lib/refund-requests";
 import { parseFormData } from "~/lib/validation";
 import { daysSince, formatPrice } from "~/lib/utils";
 import { Card, CardContent } from "~/components/ui/card";
@@ -360,7 +361,7 @@ function ResolvedRefundRequestRow({
     <li className="flex items-baseline justify-between gap-4 py-2 text-sm">
       <div>
         <span className="mr-3 inline-block w-20 font-medium">
-          {approved ? "Approved" : "Declined"}
+          {REFUND_REQUEST_STATUS_LABELS[request.status]}
         </span>
         {request.learner.name} · {request.courseTitle}
         {approved && request.refundAmount !== null && (
