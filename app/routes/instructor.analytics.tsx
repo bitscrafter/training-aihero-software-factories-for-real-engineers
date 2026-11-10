@@ -1157,13 +1157,13 @@ function TopBuyers({
                         {buyer.seatsUnredeemed} unused
                       </span>
                     ) : (
-                      "all redeemed"
+                      "all filled"
                     )}
                   </span>
                 </div>
               )}
-              {/* Said of Team Admins too, not just solo ones: the manager who
-                  bought a dozen seats and never opened the course is the very
+              {/* Said of Team Admins too, not just solo ones: the Team Admin who
+                  bought a dozen Seats and never opened the course is the very
                   person this table exists to surface. */}
               <div className="text-xs text-muted-foreground">
                 {buyer.enrolled ? "Enrolled" : "Not enrolled"}

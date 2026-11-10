@@ -258,7 +258,10 @@ describe("requesting a refund", () => {
   it("refuses a Team Admin, who has a purchase but no Enrollment", async () => {
     const course = seedCourse();
     const teamAdmin = seedTeamAdmin();
-    const purchase = seedPurchase({ userId: teamAdmin.id, courseId: course.id });
+    const purchase = seedPurchase({
+      userId: teamAdmin.id,
+      courseId: course.id,
+    });
     const team = db.insert(schema.teams).values({}).returning().get();
     db.insert(schema.coupons)
       .values({
@@ -305,7 +308,7 @@ describe("requesting a refund", () => {
     expect(storedRefundRequests()).toHaveLength(1);
   });
 
-  it("refuses a team purchase with a redeemed seat", async () => {
+  it("refuses a purchase with a filled Seat", async () => {
     const { course, student, purchase } = seedEligibleStudent();
     const team = db.insert(schema.teams).values({}).returning().get();
     db.insert(schema.coupons)
@@ -321,12 +324,12 @@ describe("requesting a refund", () => {
 
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 403,
-      message: "A team purchase with a redeemed seat cannot be refunded.",
+      message: "A purchase with a filled Seat cannot be refunded.",
     });
     expect(storedRefundRequests()).toEqual([]);
   });
 
-  it("accepts a team purchase whose seats have not been redeemed yet", async () => {
+  it("accepts a purchase whose Seats have not been filled yet", async () => {
     const { course, purchase } = seedEligibleStudent();
     const team = db.insert(schema.teams).values({}).returning().get();
     db.insert(schema.coupons)
