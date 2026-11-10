@@ -4,7 +4,7 @@ import * as schema from "~/db/schema";
 import { useFreshAppDatabase } from "~/test/setup";
 
 // A Cancellation ends an Enrollment without deleting it (ADR 0001). These
-// tests check that every enrollment list and count leaves the learner out.
+// tests check that every enrollment list and count leaves the student out.
 
 // Acting as a signed-in user: the session reports whichever user id the test
 // puts here. null means nobody is signed in.
@@ -23,17 +23,17 @@ type Course = typeof schema.courses.$inferSelect;
 
 let instructor: User;
 let course: Course;
-let stayingLearner: User;
-let refundedLearner: User;
+let stayingStudent: User;
+let refundedStudent: User;
 
 beforeEach(async () => {
   db = await useFreshAppDatabase();
   instructor = seedUser("Ida Instructor", schema.UserRole.Instructor);
   course = seedCourse("Testing Things");
-  stayingLearner = seedUser("Sam Stays", schema.UserRole.Student);
-  refundedLearner = seedUser("Rita Refunded", schema.UserRole.Student);
-  seedEnrollment(stayingLearner.id, course.id);
-  seedEnrollment(refundedLearner.id, course.id, "2026-11-01T12:00:00.000Z");
+  stayingStudent = seedUser("Sam Stays", schema.UserRole.Student);
+  refundedStudent = seedUser("Rita Refunded", schema.UserRole.Student);
+  seedEnrollment(stayingStudent.id, course.id);
+  seedEnrollment(refundedStudent.id, course.id, "2026-11-01T12:00:00.000Z");
   session.userId = null;
 });
 
@@ -110,10 +110,10 @@ function loaderArgs<Params extends Record<string, string>>(
 }
 
 // Guards ADR 0001: every enrollment list and count ignores ended Enrollments.
-describe("a learner with an ended Enrollment", () => {
+describe("a student with an ended Enrollment", () => {
   it("no longer sees the course on their dashboard", async () => {
     const { loader } = await import("./dashboard");
-    signInAs(refundedLearner);
+    signInAs(refundedStudent);
 
     const page = await loader(loaderArgs("/dashboard"));
 
@@ -123,7 +123,7 @@ describe("a learner with an ended Enrollment", () => {
 
   it("sees the course as not enrolled on the course list", async () => {
     const { loader } = await import("./courses");
-    signInAs(refundedLearner);
+    signInAs(refundedStudent);
 
     const page = await loader(loaderArgs("/courses"));
 
@@ -132,9 +132,9 @@ describe("a learner with an ended Enrollment", () => {
     expect(listed?.completedLessons).toBeNull();
   });
 
-  it("leaves a learner with an active Enrollment enrolled on the course list", async () => {
+  it("leaves a student with an active Enrollment enrolled on the course list", async () => {
     const { loader } = await import("./courses");
-    signInAs(stayingLearner);
+    signInAs(stayingStudent);
 
     const page = await loader(loaderArgs("/courses"));
 
@@ -185,7 +185,7 @@ describe("an instructor", () => {
     if (!lesson) throw new Error("seedCourse adds a lesson");
     db.insert(schema.lessonProgress)
       .values({
-        userId: refundedLearner.id,
+        userId: refundedStudent.id,
         lessonId: lesson.id,
         status: schema.LessonProgressStatus.Completed,
         completedAt: "2026-10-30T12:00:00.000Z",
@@ -217,8 +217,8 @@ describe("an instructor", () => {
   it("doesn't show a refunded top buyer as enrolled in analytics", async () => {
     const { loader } = await import("./instructor.analytics");
     signInAs(instructor);
-    seedPurchase(stayingLearner.id, course.id);
-    seedPurchase(refundedLearner.id, course.id);
+    seedPurchase(stayingStudent.id, course.id);
+    seedPurchase(refundedStudent.id, course.id);
 
     const page = await loader(loaderArgs("/instructor/analytics?range=all"));
 

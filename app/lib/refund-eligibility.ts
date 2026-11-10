@@ -11,7 +11,7 @@ export type RefundFacts = {
   hasOpenRefundRequest: boolean;
   /** An earlier Refund Request on this purchase was approved or declined. */
   hasResolvedRefundRequest: boolean;
-  /** Approved Refunds this learner has had for this course, on any purchase. */
+  /** Approved Refunds this student has had for this course, on any purchase. */
   approvedRefundCount: number;
 };
 
@@ -59,7 +59,7 @@ function hasNoResolvedRefundRequest(facts: RefundFacts): boolean {
   return !facts.hasResolvedRefundRequest;
 }
 
-// Only approved Refunds count, per learner per course. Declined requests don't.
+// Only approved Refunds count, per student per course. Declined requests don't.
 function isUnderRefundLimit(
   facts: Pick<RefundFacts, "approvedRefundCount">
 ): boolean {
@@ -69,7 +69,7 @@ function isUnderRefundLimit(
 const REFUND_LIMIT_MESSAGE = `You have already had ${MAX_APPROVED_REFUNDS_PER_COURSE} Refunds for this course, so this purchase can't be refunded.`;
 
 // A seat bought on a team licence and since claimed belongs to the team; the
-// learner cannot hand it back on their own.
+// student cannot hand it back on their own.
 function isNotClaimedTeamSeat(facts: RefundFacts): boolean {
   return !facts.isClaimedTeamSeat;
 }
@@ -158,7 +158,7 @@ export function getRefundableAmount(
 }
 
 /**
- * The warning for the purchase page, shown before buying, when a learner with
+ * The warning for the purchase page, shown before buying, when a student with
  * this many approved Refunds for the course could not get one on a new
  * purchase of it. Null below the Refund limit.
  */

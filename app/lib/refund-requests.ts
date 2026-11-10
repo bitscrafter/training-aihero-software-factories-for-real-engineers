@@ -1,6 +1,6 @@
 import { RefundRequestStatus } from "~/db/schema";
 
-/** How a Refund Request's status reads on screen, to Admins and learners. */
+/** How a Refund Request's status reads on screen, to Admins and students. */
 export const REFUND_REQUEST_STATUS_LABELS: Record<RefundRequestStatus, string> =
   {
     [RefundRequestStatus.Requested]: "Pending",

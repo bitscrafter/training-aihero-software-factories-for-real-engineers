@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as schema from "~/db/schema";
 import { useFreshAppDatabase } from "~/test/setup";
 
-// Acting as a signed-in learner: the session reports whichever user id the
+// Acting as a signed-in student: the session reports whichever user id the
 // test puts here. null means nobody is signed in.
 const session = vi.hoisted(() => ({ userId: null as number | null }));
 vi.mock("~/lib/session", () => ({
@@ -68,7 +68,7 @@ function seedCourse(price = 4900) {
     .get();
 }
 
-function seedLearner() {
+function seedStudent() {
   return db
     .insert(schema.users)
     .values({
@@ -100,25 +100,25 @@ function seedPurchase(input: {
     .get();
 }
 
-/** A learner, signed in, enrolled, who bought the course recently and watched nothing. */
-function seedEligibleLearner(
+/** A student, signed in, enrolled, who bought the course recently and watched nothing. */
+function seedEligibleStudent(
   purchaseOverrides: Pick<
     Parameters<typeof seedPurchase>[0],
     "amountPaid" | "country" | "createdAt"
   > = {}
 ) {
   const course = seedCourse();
-  const learner = seedLearner();
+  const student = seedStudent();
   const purchase = seedPurchase({
-    userId: learner.id,
+    userId: student.id,
     courseId: course.id,
     ...purchaseOverrides,
   });
   db.insert(schema.enrollments)
-    .values({ userId: learner.id, courseId: course.id })
+    .values({ userId: student.id, courseId: course.id })
     .run();
-  session.userId = learner.id;
-  return { course, learner, purchase };
+  session.userId = student.id;
+  return { course, student, purchase };
 }
 
 function storedRefundRequests() {
@@ -167,10 +167,10 @@ async function expectRefusal(promise: Promise<unknown>) {
 }
 
 describe("requesting a refund", () => {
-  it("stores an eligible learner's request, emails them, and sends them to settings", async () => {
+  it("stores an eligible student's request, emails them, and sends them to settings", async () => {
     // Paid less than list (say, with a coupon) at full purchasing power: the
     // refund is the course's list price, not the amount paid.
-    const { purchase } = seedEligibleLearner({
+    const { purchase } = seedEligibleStudent({
       amountPaid: 3900,
       country: "US",
     });
@@ -196,8 +196,8 @@ describe("requesting a refund", () => {
     expect(logged).toContain("If it is approved, your refund will be $49.00.");
   });
 
-  it("refunds a purchasing-power purchase at the price the learner paid", async () => {
-    seedEligibleLearner({
+  it("refunds a purchasing-power purchase at the price the student paid", async () => {
+    seedEligibleStudent({
       amountPaid: 2450,
       country: "IN",
     });
@@ -209,8 +209,8 @@ describe("requesting a refund", () => {
     );
   });
 
-  it("refuses a learner who is not signed in", async () => {
-    seedEligibleLearner();
+  it("refuses a student who is not signed in", async () => {
+    seedEligibleStudent();
     session.userId = null;
 
     expect(await expectRefusal(requestRefund())).toEqual({
@@ -221,7 +221,7 @@ describe("requesting a refund", () => {
   });
 
   it("refuses a course that does not exist", async () => {
-    seedEligibleLearner();
+    seedEligibleStudent();
 
     expect(await expectRefusal(requestRefund("no-such-course"))).toEqual({
       status: 404,
@@ -230,10 +230,10 @@ describe("requesting a refund", () => {
     expect(storedRefundRequests()).toEqual([]);
   });
 
-  it("refuses a learner who has not bought the course", async () => {
+  it("refuses a student who has not bought the course", async () => {
     seedCourse();
-    const learner = seedLearner();
-    session.userId = learner.id;
+    const student = seedStudent();
+    session.userId = student.id;
 
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 403,
@@ -244,7 +244,7 @@ describe("requesting a refund", () => {
 
   it("refuses a team buyer, who has a purchase but no Enrollment", async () => {
     const course = seedCourse();
-    const buyer = seedLearner();
+    const buyer = seedStudent();
     const purchase = seedPurchase({ userId: buyer.id, courseId: course.id });
     const team = db.insert(schema.teams).values({}).returning().get();
     db.insert(schema.coupons)
@@ -264,8 +264,8 @@ describe("requesting a refund", () => {
     expect(storedRefundRequests()).toEqual([]);
   });
 
-  it("refuses a refunded learner, whose Enrollment has ended", async () => {
-    const { course, learner, purchase } = seedEligibleLearner();
+  it("refuses a refunded student, whose Enrollment has ended", async () => {
+    const { course, student, purchase } = seedEligibleStudent();
     db.insert(schema.refundRequests)
       .values({
         purchaseId: purchase.id,
@@ -279,7 +279,7 @@ describe("requesting a refund", () => {
       .set({ endedAt: PURCHASED_RECENTLY })
       .where(
         and(
-          eq(schema.enrollments.userId, learner.id),
+          eq(schema.enrollments.userId, student.id),
           eq(schema.enrollments.courseId, course.id)
         )
       )
@@ -293,7 +293,7 @@ describe("requesting a refund", () => {
   });
 
   it("refuses a claimed team seat", async () => {
-    const { course, learner, purchase } = seedEligibleLearner();
+    const { course, student, purchase } = seedEligibleStudent();
     const team = db.insert(schema.teams).values({}).returning().get();
     db.insert(schema.coupons)
       .values({
@@ -301,7 +301,7 @@ describe("requesting a refund", () => {
         courseId: course.id,
         code: "SEAT-1",
         purchaseId: purchase.id,
-        redeemedByUserId: learner.id,
+        redeemedByUserId: student.id,
         redeemedAt: PURCHASED_RECENTLY,
       })
       .run();
@@ -314,7 +314,7 @@ describe("requesting a refund", () => {
   });
 
   it("accepts a purchase whose team seat has not been claimed yet", async () => {
-    const { course, purchase } = seedEligibleLearner();
+    const { course, purchase } = seedEligibleStudent();
     const team = db.insert(schema.teams).values({}).returning().get();
     db.insert(schema.coupons)
       .values({
@@ -331,7 +331,7 @@ describe("requesting a refund", () => {
   });
 
   it("accepts a request on the fourteenth day after purchase", async () => {
-    seedEligibleLearner({
+    seedEligibleStudent({
       createdAt: "2026-02-24T12:00:00.000Z",
     });
 
@@ -341,7 +341,7 @@ describe("requesting a refund", () => {
   });
 
   it("refuses once the 14-day window has closed", async () => {
-    seedEligibleLearner({
+    seedEligibleStudent({
       createdAt: "2026-02-23T12:00:00.000Z",
     });
 
@@ -352,8 +352,8 @@ describe("requesting a refund", () => {
     expect(storedRefundRequests()).toEqual([]);
   });
 
-  it("refuses a learner who has watched 2 hours of the course", async () => {
-    const { course, learner } = seedEligibleLearner();
+  it("refuses a student who has watched 2 hours of the course", async () => {
+    const { course, student } = seedEligibleStudent();
     const courseModule = db
       .insert(schema.modules)
       .values({ courseId: course.id, title: "Module 1", position: 1 })
@@ -375,7 +375,7 @@ describe("requesting a refund", () => {
     for (const lessonId of lessonIds) {
       db.insert(schema.videoWatchEvents)
         .values({
-          userId: learner.id,
+          userId: student.id,
           lessonId,
           eventType: "progress",
           positionSeconds: 3600,
@@ -390,8 +390,8 @@ describe("requesting a refund", () => {
     expect(storedRefundRequests()).toEqual([]);
   });
 
-  it("refuses a learner who has completed half the lessons", async () => {
-    const { course, learner } = seedEligibleLearner();
+  it("refuses a student who has completed half the lessons", async () => {
+    const { course, student } = seedEligibleStudent();
     const courseModule = db
       .insert(schema.modules)
       .values({ courseId: course.id, title: "Module 1", position: 1 })
@@ -410,7 +410,7 @@ describe("requesting a refund", () => {
     );
     db.insert(schema.lessonProgress)
       .values({
-        userId: learner.id,
+        userId: student.id,
         lessonId: firstLesson.id,
         status: schema.LessonProgressStatus.Completed,
         completedAt: PURCHASED_RECENTLY,
@@ -425,7 +425,7 @@ describe("requesting a refund", () => {
   });
 
   it("refuses on a date before the purchase day", async () => {
-    seedEligibleLearner({ createdAt: "2026-03-11T12:00:00.000Z" });
+    seedEligibleStudent({ createdAt: "2026-03-11T12:00:00.000Z" });
 
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 403,
@@ -435,7 +435,7 @@ describe("requesting a refund", () => {
   });
 
   it("refuses a second request while one is open, storing nothing more", async () => {
-    seedEligibleLearner();
+    seedEligibleStudent();
     await requestRefund();
 
     expect(await expectRefusal(requestRefund())).toEqual({
@@ -446,7 +446,7 @@ describe("requesting a refund", () => {
   });
 
   it("refuses a second request once the first was declined, because the decision is final", async () => {
-    const { purchase } = seedEligibleLearner();
+    const { purchase } = seedEligibleStudent();
     db.insert(schema.refundRequests)
       .values({
         purchaseId: purchase.id,
@@ -464,11 +464,11 @@ describe("requesting a refund", () => {
     expect(storedRefundRequests()).toHaveLength(1);
   });
 
-  it("refuses a new purchase once the learner has had 3 Refunds for the course", async () => {
-    const { course, learner } = seedEligibleLearner({
+  it("refuses a new purchase once the student has had 3 Refunds for the course", async () => {
+    const { course, student } = seedEligibleStudent({
       createdAt: "2026-03-08T12:00:00.000Z",
     });
-    seedEarlierRefundRequests(learner.id, course.id, [
+    seedEarlierRefundRequests(student.id, course.id, [
       schema.RefundRequestStatus.Approved,
       schema.RefundRequestStatus.Approved,
       schema.RefundRequestStatus.Approved,
@@ -483,10 +483,10 @@ describe("requesting a refund", () => {
   });
 
   it("accepts a new purchase after 2 Refunds and a declined request for the course", async () => {
-    const { course, learner } = seedEligibleLearner({
+    const { course, student } = seedEligibleStudent({
       createdAt: "2026-03-08T12:00:00.000Z",
     });
-    seedEarlierRefundRequests(learner.id, course.id, [
+    seedEarlierRefundRequests(student.id, course.id, [
       schema.RefundRequestStatus.Approved,
       schema.RefundRequestStatus.Approved,
       schema.RefundRequestStatus.Declined,
@@ -498,11 +498,11 @@ describe("requesting a refund", () => {
   });
 
   it("does not count Refunds for other courses toward the limit", async () => {
-    const { learner } = seedEligibleLearner({
+    const { student } = seedEligibleStudent({
       createdAt: "2026-03-08T12:00:00.000Z",
     });
     const otherCourse = seedOtherCourse();
-    seedEarlierRefundRequests(learner.id, otherCourse.id, [
+    seedEarlierRefundRequests(student.id, otherCourse.id, [
       schema.RefundRequestStatus.Approved,
       schema.RefundRequestStatus.Approved,
       schema.RefundRequestStatus.Approved,
@@ -514,7 +514,7 @@ describe("requesting a refund", () => {
   });
 
   it("refuses a reason that is too short, storing nothing", async () => {
-    seedEligibleLearner();
+    seedEligibleStudent();
 
     const response = await requestRefund("testing-things", "meh");
 
@@ -533,8 +533,8 @@ describe("requesting a refund", () => {
 });
 
 /**
- * Earlier purchases of the course by the learner, each with a resolved Refund
- * Request of the given status. Bought before the learner's latest purchase.
+ * Earlier purchases of the course by the student, each with a resolved Refund
+ * Request of the given status. Bought before the student's latest purchase.
  */
 function seedEarlierRefundRequests(
   userId: number,
@@ -566,7 +566,7 @@ function seedOtherCourse() {
     .from(schema.courses)
     .where(eq(schema.courses.slug, "testing-things"))
     .get();
-  if (!course) throw new Error("seedEligibleLearner adds testing-things");
+  if (!course) throw new Error("seedEligibleStudent adds testing-things");
   return db
     .insert(schema.courses)
     .values({

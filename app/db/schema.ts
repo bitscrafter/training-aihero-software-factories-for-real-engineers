@@ -232,7 +232,7 @@ export const purchases = sqliteTable(
   (table) => [index("purchases_course_idx").on(table.courseId)]
 );
 
-// A learner's ask to get back what they paid. Approving one produces a Refund.
+// A student's ask to get back what they paid. Approving one produces a Refund.
 export const refundRequests = sqliteTable(
   "refund_requests",
   {
@@ -244,12 +244,12 @@ export const refundRequests = sqliteTable(
       .notNull()
       .$type<RefundRequestStatus>()
       .default(RefundRequestStatus.Requested),
-    // The learner's own words, in the box on the course page.
+    // The student's own words, in the box on the course page.
     reason: text("reason").notNull(),
     // The Refund given. Null until someone approves; a declined request
     // refunds nothing.
     amountRefunded: integer("amount_refunded"),
-    // The Admin's note to the learner. Set only when the request is declined.
+    // The Admin's note to the student. Set only when the request is declined.
     declineNote: text("decline_note"),
     requestedAt: text("requested_at")
       .notNull()

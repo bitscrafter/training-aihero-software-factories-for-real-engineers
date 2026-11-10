@@ -43,7 +43,7 @@ function seedCourse(slug: string) {
     .get();
 }
 
-function seedLearner() {
+function seedStudent() {
   return db
     .insert(schema.users)
     .values({
@@ -56,58 +56,58 @@ function seedLearner() {
 }
 
 describe("Enrollment", () => {
-  it("a learner who never enrolled is not enrolled", () => {
+  it("a student who never enrolled is not enrolled", () => {
     const course = seedCourse("testing-things");
-    const learner = seedLearner();
+    const student = seedStudent();
 
-    expect(enrollment.isEnrolled(learner.id, course.id)).toBe(false);
-    expect(enrollment.findEnrollment(learner.id, course.id)).toBeUndefined();
+    expect(enrollment.isEnrolled(student.id, course.id)).toBe(false);
+    expect(enrollment.findEnrollment(student.id, course.id)).toBeUndefined();
   });
 
-  it("enrolling makes the learner enrolled in that course", () => {
+  it("enrolling makes the student enrolled in that course", () => {
     const course = seedCourse("testing-things");
-    const learner = seedLearner();
+    const student = seedStudent();
 
-    const enrolled = enrollment.enroll(learner.id, course.id);
+    const enrolled = enrollment.enroll(student.id, course.id);
 
-    expect(enrollment.isEnrolled(learner.id, course.id)).toBe(true);
-    expect(enrollment.findEnrollment(learner.id, course.id)).toEqual(enrolled);
-    expect(enrolled).toMatchObject({ userId: learner.id, courseId: course.id });
+    expect(enrollment.isEnrolled(student.id, course.id)).toBe(true);
+    expect(enrollment.findEnrollment(student.id, course.id)).toEqual(enrolled);
+    expect(enrolled).toMatchObject({ userId: student.id, courseId: course.id });
   });
 
-  it("enrolling twice leaves the learner with one Enrollment", () => {
+  it("enrolling twice leaves the student with one Enrollment", () => {
     const course = seedCourse("testing-things");
-    const learner = seedLearner();
+    const student = seedStudent();
 
-    const first = enrollment.enroll(learner.id, course.id);
-    const second = enrollment.enroll(learner.id, course.id);
+    const first = enrollment.enroll(student.id, course.id);
+    const second = enrollment.enroll(student.id, course.id);
 
     expect(second.id).toBe(first.id);
     expect(db.select().from(schema.enrollments).all()).toHaveLength(1);
   });
 
-  it("an Enrollment in one course does not enroll the learner in another", () => {
+  it("an Enrollment in one course does not enroll the student in another", () => {
     const enrolledCourse = seedCourse("testing-things");
     const otherCourse = seedCourse("other-things");
-    const learner = seedLearner();
+    const student = seedStudent();
 
-    enrollment.enroll(learner.id, enrolledCourse.id);
+    enrollment.enroll(student.id, enrolledCourse.id);
 
-    expect(enrollment.isEnrolled(learner.id, otherCourse.id)).toBe(false);
+    expect(enrollment.isEnrolled(student.id, otherCourse.id)).toBe(false);
   });
 
-  it("a learner whose Enrollment has ended is no longer enrolled, but the Enrollment is kept", () => {
+  it("a student whose Enrollment has ended is no longer enrolled, but the Enrollment is kept", () => {
     const course = seedCourse("testing-things");
-    const learner = seedLearner();
-    enrollment.enroll(learner.id, course.id);
+    const student = seedStudent();
+    enrollment.enroll(student.id, course.id);
 
-    enrollment.endEnrollment(learner.id, course.id);
+    enrollment.endEnrollment(student.id, course.id);
 
-    expect(enrollment.isEnrolled(learner.id, course.id)).toBe(false);
-    expect(enrollment.findEnrollment(learner.id, course.id)).toBeUndefined();
+    expect(enrollment.isEnrolled(student.id, course.id)).toBe(false);
+    expect(enrollment.findEnrollment(student.id, course.id)).toBeUndefined();
     expect(db.select().from(schema.enrollments).all()).toEqual([
       expect.objectContaining({
-        userId: learner.id,
+        userId: student.id,
         courseId: course.id,
         endedAt: expect.any(String),
       }),

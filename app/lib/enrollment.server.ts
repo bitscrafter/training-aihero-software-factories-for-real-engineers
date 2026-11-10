@@ -3,8 +3,8 @@ import { db } from "~/db";
 import { enrollments } from "~/db/schema";
 
 // ─── Enrollment ───
-// The one place that answers "is this learner enrolled in this course?" and
-// that enrolls them. A learner has at most one Enrollment per course.
+// The one place that answers "is this student enrolled in this course?" and
+// that enrolls them. A student has at most one Enrollment per course.
 //
 // An Enrollment with an "ended at" has had a Cancellation: it is kept, never
 // deleted, but no longer counts as enrolled (ADR 0001).
@@ -18,13 +18,13 @@ export type Executor = Pick<typeof db, "update">;
 
 /**
  * The condition that keeps only active Enrollments, leaving out ended ones.
- * Every query that lists or counts enrolled learners filters with it.
+ * Every query that lists or counts enrolled students filters with it.
  */
 export function isActiveEnrollment(): SQL {
   return isNull(enrollments.endedAt);
 }
 
-/** The learner's active Enrollment in the course, if any. */
+/** The student's active Enrollment in the course, if any. */
 export function findEnrollment(
   userId: number,
   courseId: number
@@ -32,7 +32,7 @@ export function findEnrollment(
   return lookUpEnrollment(userId, courseId, isActiveEnrollment());
 }
 
-/** The learner's Enrollment in the course, active or ended, if any. */
+/** The student's Enrollment in the course, active or ended, if any. */
 function lookUpEnrollment(
   userId: number,
   courseId: number,
@@ -56,7 +56,7 @@ export function isEnrolled(userId: number, courseId: number): boolean {
 }
 
 /**
- * Enrolls the learner in the course. Enrolling someone who is already
+ * Enrolls the student in the course. Enrolling someone who is already
  * enrolled returns their existing Enrollment rather than creating another.
  * Enrolling someone whose Enrollment has ended reopens it, keeping when they
  * first enrolled and when they completed the course (ADR 0001).
@@ -82,7 +82,7 @@ export function enroll(userId: number, courseId: number): Enrollment {
 }
 
 /**
- * A Cancellation: ends the learner's active Enrollment in the course, keeping
+ * A Cancellation: ends the student's active Enrollment in the course, keeping
  * the row. Pass the transaction when this is part of a larger write.
  */
 export function endEnrollment(
