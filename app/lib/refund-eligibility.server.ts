@@ -18,8 +18,8 @@ import {
 } from "~/lib/refund-eligibility";
 
 /**
- * Reads, for a learner's latest purchase of a course, the facts that
- * `checkRefundEligibility` decides on. Returns null if the learner has not
+ * Reads, for a student's latest purchase of a course, the facts that
+ * `checkRefundEligibility` decides on. Returns null if the student has not
  * bought the course.
  */
 export function getRefundFacts(
@@ -61,7 +61,7 @@ export function getRefundableAmountForPurchase(
 }
 
 /**
- * How many approved Refunds a learner has had for a course, across every
+ * How many approved Refunds a student has had for a course, across every
  * purchase of it. Declined and open requests don't count.
  */
 export function getApprovedRefundCount(
@@ -84,7 +84,7 @@ export function getApprovedRefundCount(
 }
 
 /**
- * How much of a course a learner has used, all-time across every purchase:
+ * How much of a course a student has used, all-time across every purchase:
  * watch time in seconds, lessons completed, and the course's lesson count.
  */
 export function getCourseUsage(

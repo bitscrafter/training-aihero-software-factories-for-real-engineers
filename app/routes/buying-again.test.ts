@@ -3,11 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as schema from "~/db/schema";
 import { useFreshAppDatabase } from "~/test/setup";
 
-// Buying again after a Cancellation reopens the learner's existing Enrollment
+// Buying again after a Cancellation reopens the student's existing Enrollment
 // (ADR 0001): there is never a second Enrollment, and all learning state comes
 // back as it was.
 
-// Acting as a signed-in learner: the session reports whichever user id the
+// Acting as a signed-in student: the session reports whichever user id the
 // test puts here. The session holds no dev country override.
 const session = vi.hoisted(() => ({ userId: null as number | null }));
 vi.mock("~/lib/session", () => ({
@@ -36,10 +36,10 @@ afterEach(() => {
 });
 
 /**
- * A learner who bought and completed the course, watched part of its video
+ * A student who bought and completed the course, watched part of its video
  * lesson and passed its quiz, then had a Cancellation (an approved Refund).
  */
-async function seedRefundedLearner() {
+async function seedRefundedStudent() {
   const instructor = db
     .insert(schema.users)
     .values({
@@ -91,7 +91,7 @@ async function seedRefundedLearner() {
     .returning()
     .get();
 
-  const learner = db
+  const student = db
     .insert(schema.users)
     .values({
       name: "Lena Learner",
@@ -102,7 +102,7 @@ async function seedRefundedLearner() {
     .get();
   db.insert(schema.purchases)
     .values({
-      userId: learner.id,
+      userId: student.id,
       courseId: course.id,
       amountPaid: 4900,
       country: "US",
@@ -112,7 +112,7 @@ async function seedRefundedLearner() {
   const enrollment = db
     .insert(schema.enrollments)
     .values({
-      userId: learner.id,
+      userId: student.id,
       courseId: course.id,
       enrolledAt: ENROLLED_AT,
       completedAt: COMPLETED_AT,
@@ -121,7 +121,7 @@ async function seedRefundedLearner() {
     .get();
   db.insert(schema.lessonProgress)
     .values({
-      userId: learner.id,
+      userId: student.id,
       lessonId: lesson.id,
       status: schema.LessonProgressStatus.Completed,
       completedAt: COMPLETED_AT,
@@ -129,21 +129,21 @@ async function seedRefundedLearner() {
     .run();
   db.insert(schema.videoWatchEvents)
     .values({
-      userId: learner.id,
+      userId: student.id,
       lessonId: lesson.id,
       eventType: "pause",
       positionSeconds: 245,
     })
     .run();
   db.insert(schema.quizAttempts)
-    .values({ userId: learner.id, quizId: quiz.id, score: 0.9, passed: true })
+    .values({ userId: student.id, quizId: quiz.id, score: 0.9, passed: true })
     .run();
 
   const { endEnrollment } = await import("~/lib/enrollment.server");
-  endEnrollment(learner.id, course.id);
+  endEnrollment(student.id, course.id);
 
-  session.userId = learner.id;
-  return { course, mod, lesson, learner, enrollment };
+  session.userId = student.id;
+  return { course, mod, lesson, student, enrollment };
 }
 
 /** Runs a route action and returns the redirect or error Response it ends with. */
@@ -182,7 +182,7 @@ function enrollmentsOf(userId: number) {
 // Guards ADR 0001: buying again reopens the Enrollment and restores learning state.
 describe("Buying again after a Cancellation", () => {
   it("reopens the same Enrollment instead of creating a second one", async () => {
-    const { learner, enrollment } = await seedRefundedLearner();
+    const { student, enrollment } = await seedRefundedStudent();
 
     const response = await buyAgain();
 
@@ -190,7 +190,7 @@ describe("Buying again after a Cancellation", () => {
     expect((response as Response).headers.get("Location")).toBe(
       "/courses/testing-things/welcome"
     );
-    const rows = enrollmentsOf(learner.id);
+    const rows = enrollmentsOf(student.id);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       id: enrollment.id,
@@ -242,7 +242,7 @@ async function redeem(code: string) {
 
 describe("Redeeming a coupon after a Cancellation", () => {
   it("reopens the same Enrollment instead of creating a second one", async () => {
-    const { course, learner, enrollment } = await seedRefundedLearner();
+    const { course, student, enrollment } = await seedRefundedStudent();
     const code = seedCoupon(course.id);
 
     const response = await redeem(code);
@@ -251,7 +251,7 @@ describe("Redeeming a coupon after a Cancellation", () => {
     expect((response as Response).headers.get("Location")).toBe(
       "/courses/testing-things/welcome"
     );
-    const rows = enrollmentsOf(learner.id);
+    const rows = enrollmentsOf(student.id);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       id: enrollment.id,
@@ -288,7 +288,7 @@ async function viewDashboard() {
 
 describe("Learning state after buying again", () => {
   it("shows the earlier lesson progress, video position and quiz result", async () => {
-    const { lesson } = await seedRefundedLearner();
+    const { lesson } = await seedRefundedStudent();
 
     await buyAgain();
     const page = await viewLesson("testing-things", lesson.id);
@@ -300,7 +300,7 @@ describe("Learning state after buying again", () => {
   });
 
   it("shows the course as completed on the date it was first completed", async () => {
-    await seedRefundedLearner();
+    await seedRefundedStudent();
 
     await buyAgain();
     const dashboard = await viewDashboard();

@@ -2726,10 +2726,10 @@ This course is still in draft while the cluster examples are rewritten against t
   );
 
   // ─── Refund Requests ───
-  // Four learners who each bought one course and asked for their money back:
+  // Four students who each bought one course and asked for their money back:
   // two are still open for an Admin to resolve, one was approved (a Refund, so
   // their Enrollment has ended — kept, not deleted, per ADR 0001), and one was
-  // declined with a note to the learner.
+  // declined with a note to the student.
 
   function seedRefundRequest(input: {
     name: string;
@@ -2746,7 +2746,7 @@ This course is still in draft while the cluster examples are rewritten against t
           declineNote: string;
         };
   }) {
-    const [learner] = db
+    const [student] = db
       .insert(schema.users)
       .values({
         name: input.name,
@@ -2760,7 +2760,7 @@ This course is still in draft while the cluster examples are rewritten against t
     const [purchase] = db
       .insert(schema.purchases)
       .values({
-        userId: learner.id,
+        userId: student.id,
         courseId: input.course.id,
         amountPaid: input.course.price,
         country: "US",
@@ -2772,7 +2772,7 @@ This course is still in draft while the cluster examples are rewritten against t
     const resolution = input.resolution;
     db.insert(schema.enrollments)
       .values({
-        userId: learner.id,
+        userId: student.id,
         courseId: input.course.id,
         enrolledAt: daysAgo(input.purchasedDaysAgo),
         endedAt:

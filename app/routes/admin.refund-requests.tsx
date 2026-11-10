@@ -76,7 +76,7 @@ const resolutionFormSchema = z.discriminatedUnion("intent", [
   z.object({
     intent: z.literal("decline"),
     refundRequestId: refundRequestIdSchema,
-    note: z.string().trim().min(1, "Write a note to the learner."),
+    note: z.string().trim().min(1, "Write a note to the student."),
   }),
 ]);
 
@@ -109,8 +109,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (result.outcome === "approved") {
     logEmail(
       buildRefundApprovedEmail({
-        learnerName: result.learner.name,
-        learnerEmail: result.learner.email,
+        studentName: result.student.name,
+        studentEmail: result.student.email,
         courseTitle: result.courseTitle,
         amount: result.amountRefunded,
       })
@@ -120,8 +120,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (result.outcome === "declined") {
     logEmail(
       buildRefundDeclinedEmail({
-        learnerName: result.learner.name,
-        learnerEmail: result.learner.email,
+        studentName: result.student.name,
+        studentEmail: result.student.email,
         courseTitle: result.courseTitle,
         note: result.note,
       })
@@ -138,18 +138,18 @@ function logEmail(email: Email) {
   console.log(`[email] to=${email.to} subject=${email.subject}\n${email.body}`);
 }
 
-/** A learner email: the greeting, the given paragraphs, and the sign-off. */
-function buildLearnerEmail(input: {
-  learnerName: string;
-  learnerEmail: string;
+/** A student email: the greeting, the given paragraphs, and the sign-off. */
+function buildStudentEmail(input: {
+  studentName: string;
+  studentEmail: string;
   subject: string;
   paragraphs: string[][];
 }): Email {
   return {
-    to: input.learnerEmail,
+    to: input.studentEmail,
     subject: input.subject,
     body: [
-      [`Hi ${input.learnerName},`],
+      [`Hi ${input.studentName},`],
       ...input.paragraphs,
       ["— The Cadence team"],
     ]
@@ -158,14 +158,14 @@ function buildLearnerEmail(input: {
   };
 }
 
-/** The email a learner gets when their Refund Request is declined. */
+/** The email a student gets when their Refund Request is declined. */
 function buildRefundDeclinedEmail(input: {
-  learnerName: string;
-  learnerEmail: string;
+  studentName: string;
+  studentEmail: string;
   courseTitle: string;
   note: string;
 }) {
-  return buildLearnerEmail({
+  return buildStudentEmail({
     ...input,
     subject: `Refund Request declined: ${input.courseTitle}`,
     paragraphs: [
@@ -178,14 +178,14 @@ function buildRefundDeclinedEmail(input: {
   });
 }
 
-/** The email a learner gets when their Refund Request is approved. */
+/** The email a student gets when their Refund Request is approved. */
 function buildRefundApprovedEmail(input: {
-  learnerName: string;
-  learnerEmail: string;
+  studentName: string;
+  studentEmail: string;
   courseTitle: string;
   amount: number;
 }) {
-  return buildLearnerEmail({
+  return buildStudentEmail({
     ...input,
     subject: `Refund approved: ${input.courseTitle}`,
     paragraphs: [
@@ -230,7 +230,7 @@ function ApproveRefundRequestButton({
 }) {
   const fetcher = useFetcher<typeof action>();
   const amount = formatPrice(request.refundAmount);
-  const firstName = request.learner.name.split(" ")[0];
+  const firstName = request.student.name.split(" ")[0];
 
   return (
     <fetcher.Form
@@ -252,7 +252,7 @@ function ApproveRefundRequestButton({
 }
 
 /**
- * "Decline…" opens an inline form for the note to the learner, which is
+ * "Decline…" opens an inline form for the note to the student, which is
  * required. Cancel closes it without changing anything.
  */
 function DeclineRefundRequestForm({
@@ -270,7 +270,7 @@ function DeclineRefundRequestForm({
     <fetcher.Form method="post" className="w-full space-y-2">
       <input type="hidden" name="intent" value="decline" />
       <input type="hidden" name="refundRequestId" value={request.id} />
-      <Label htmlFor={noteId}>Note to {request.learner.name}</Label>
+      <Label htmlFor={noteId}>Note to {request.student.name}</Label>
       <Textarea
         id={noteId}
         name="note"
@@ -304,9 +304,9 @@ function OpenRefundRequestCard({ request }: { request: OpenRefundRequest }) {
       <CardContent className="space-y-1 p-4 text-sm">
         <div className="flex items-baseline justify-between gap-4">
           <div className="font-medium">
-            {request.learner.name}{" "}
+            {request.student.name}{" "}
             <span className="text-muted-foreground">
-              · {request.learner.email}
+              · {request.student.email}
             </span>
           </div>
           <div
@@ -366,7 +366,7 @@ function ResolvedRefundRequestRow({
         <span className="mr-3 inline-block w-20 font-medium">
           {REFUND_REQUEST_STATUS_LABELS[request.status]}
         </span>
-        {request.learner.name} · {request.courseTitle}
+        {request.student.name} · {request.courseTitle}
         {approved && request.refundAmount !== null && (
           <> · {formatPrice(request.refundAmount)}</>
         )}

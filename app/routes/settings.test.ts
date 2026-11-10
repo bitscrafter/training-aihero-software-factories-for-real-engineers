@@ -99,8 +99,8 @@ async function loadSettings() {
 }
 
 describe("settings loader: Refund Requests", () => {
-  it("lists the learner's open, approved and declined Refund Requests with the Refund amount or the decline note", async () => {
-    const ana = seedUser("Ana Learner");
+  it("lists the student's open, approved and declined Refund Requests with the Refund amount or the decline note", async () => {
+    const ana = seedUser("Ana Student");
     const admin = seedUser("Luis Admin", schema.UserRole.Admin);
     const typescript = seedCourse("Advanced TypeScript");
     const react = seedCourse("React Basics");
@@ -158,9 +158,9 @@ describe("settings loader: Refund Requests", () => {
     ]);
   });
 
-  it("shows the learner only their own Refund Requests", async () => {
-    const ana = seedUser("Ana Learner");
-    const ben = seedUser("Ben Learner");
+  it("shows the student only their own Refund Requests", async () => {
+    const ana = seedUser("Ana Student");
+    const ben = seedUser("Ben Student");
     const typescript = seedCourse("Advanced TypeScript");
     const react = seedCourse("React Basics");
     seedRefundRequest({

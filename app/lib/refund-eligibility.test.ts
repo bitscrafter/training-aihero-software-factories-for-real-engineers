@@ -147,7 +147,7 @@ describe("checkRefundEligibility", () => {
     ).toMatchObject({ eligible: true });
   });
 
-  it("refuses once the learner has had 3 approved Refunds for the course", () => {
+  it("refuses once the student has had 3 approved Refunds for the course", () => {
     expect(
       checkRefundEligibility(facts({ approvedRefundCount: 3 }), TODAY)
     ).toEqual({

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as schema from "~/db/schema";
 import { useFreshAppDatabase } from "~/test/setup";
 
-// Acting as a signed-in learner: the session reports whichever user id the
+// Acting as a signed-in student: the session reports whichever user id the
 // test puts here. The country comes from neither the session nor a header.
 const session = vi.hoisted(() => ({ userId: null as number | null }));
 vi.mock("~/lib/session", () => ({
@@ -51,9 +51,9 @@ function seedCourse(slug: string) {
     .get();
 }
 
-/** A signed-in learner, not enrolled in anything. */
-function seedSignedInLearner() {
-  const learner = db
+/** A signed-in student, not enrolled in anything. */
+function seedSignedInStudent() {
+  const student = db
     .insert(schema.users)
     .values({
       name: "Lena Learner",
@@ -62,8 +62,8 @@ function seedSignedInLearner() {
     })
     .returning()
     .get();
-  session.userId = learner.id;
-  return learner;
+  session.userId = student.id;
+  return student;
 }
 
 /** Earlier purchases of the course, each with a resolved Refund Request. */
@@ -106,10 +106,10 @@ async function loadPurchasePage(slug: string) {
 const { Approved, Declined } = schema.RefundRequestStatus;
 
 describe("the purchase page's Refund limit warning", () => {
-  it("warns a learner who has had 3 Refunds for the course", async () => {
+  it("warns a student who has had 3 Refunds for the course", async () => {
     const course = seedCourse("testing-things");
-    const learner = seedSignedInLearner();
-    seedRefundRequests(learner.id, course.id, [Approved, Approved, Approved]);
+    const student = seedSignedInStudent();
+    seedRefundRequests(student.id, course.id, [Approved, Approved, Approved]);
 
     const loaded = await loadPurchasePage("testing-things");
 
@@ -120,8 +120,8 @@ describe("the purchase page's Refund limit warning", () => {
 
   it("does not warn below the limit, with declined requests not counting", async () => {
     const course = seedCourse("testing-things");
-    const learner = seedSignedInLearner();
-    seedRefundRequests(learner.id, course.id, [Approved, Approved, Declined]);
+    const student = seedSignedInStudent();
+    seedRefundRequests(student.id, course.id, [Approved, Approved, Declined]);
 
     const loaded = await loadPurchasePage("testing-things");
 
@@ -131,8 +131,8 @@ describe("the purchase page's Refund limit warning", () => {
   it("does not count Refunds for other courses", async () => {
     seedCourse("testing-things");
     const other = seedCourse("other-things");
-    const learner = seedSignedInLearner();
-    seedRefundRequests(learner.id, other.id, [Approved, Approved, Approved]);
+    const student = seedSignedInStudent();
+    seedRefundRequests(student.id, other.id, [Approved, Approved, Approved]);
 
     const loaded = await loadPurchasePage("testing-things");
 

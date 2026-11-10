@@ -56,8 +56,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("User not found.", { status: 404 });
   }
 
-  // Every Refund Request the learner has made, newest first, with its outcome.
-  const learnerRefundRequests = db
+  // Every Refund Request the student has made, newest first, with its outcome.
+  const studentRefundRequests = db
     .select({
       id: refundRequests.id,
       courseTitle: courses.title,
@@ -85,7 +85,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       bio: currentUser.bio,
       role: currentUser.role,
     },
-    refundRequests: learnerRefundRequests,
+    refundRequests: studentRefundRequests,
   };
 }
 

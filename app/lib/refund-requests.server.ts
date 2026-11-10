@@ -17,7 +17,7 @@ import {
 const resolvers = alias(users, "resolvers");
 
 /**
- * Refund Requests with the purchase each is about, the learner who bought it,
+ * Refund Requests with the purchase each is about, the student who bought it,
  * the course bought, and the Admin who resolved it (null while open).
  */
 function selectRefundRequests() {
@@ -37,7 +37,7 @@ function selectRefundRequests() {
         amountPaid: purchases.amountPaid,
         country: purchases.country,
       },
-      learner: { id: users.id, name: users.name, email: users.email },
+      student: { id: users.id, name: users.name, email: users.email },
       course: { id: courses.id, title: courses.title, price: courses.price },
       resolvedBy: { name: resolvers.name },
     })
@@ -65,13 +65,13 @@ export function getOpenRefundRequests() {
     .all()
     .map((row) => ({
       id: row.request.id,
-      learner: { name: row.learner.name, email: row.learner.email },
+      student: { name: row.student.name, email: row.student.email },
       courseTitle: row.course.title,
       requestedAt: row.request.requestedAt,
       purchasedAt: row.purchase.createdAt,
       amountPaid: row.purchase.amountPaid,
       refundAmount: getRefundableAmountForPurchase(row.purchase, row.course),
-      ...getCourseUsage(row.learner.id, row.course.id),
+      ...getCourseUsage(row.student.id, row.course.id),
       reason: row.request.reason,
     }));
 }
@@ -89,7 +89,7 @@ export function getResolvedRefundRequests() {
     .map((row) => ({
       id: row.request.id,
       status: row.request.status,
-      learner: { name: row.learner.name },
+      student: { name: row.student.name },
       courseTitle: row.course.title,
       refundAmount: row.request.amountRefunded,
       declineNote: row.request.declineNote,
@@ -103,7 +103,7 @@ export type ApproveRefundRequestResult =
   | { outcome: "alreadyResolved" }
   | {
       outcome: "approved";
-      learner: { name: string; email: string };
+      student: { name: string; email: string };
       courseTitle: string;
       amountRefunded: number;
     };
@@ -133,7 +133,7 @@ export function approveRefundRequest(
       { status: RefundRequestStatus.Approved, amountRefunded },
       tx
     );
-    if (resolved) endEnrollment(request.learner.id, request.course.id, tx);
+    if (resolved) endEnrollment(request.student.id, request.course.id, tx);
     return resolved;
   });
 
@@ -141,7 +141,7 @@ export function approveRefundRequest(
 
   return {
     outcome: "approved",
-    learner: { name: request.learner.name, email: request.learner.email },
+    student: { name: request.student.name, email: request.student.email },
     courseTitle: request.course.title,
     amountRefunded,
   };
@@ -152,14 +152,14 @@ export type DeclineRefundRequestResult =
   | { outcome: "alreadyResolved" }
   | {
       outcome: "declined";
-      learner: { name: string; email: string };
+      student: { name: string; email: string };
       courseTitle: string;
       note: string;
     };
 
 /**
- * Declines an open Refund Request with the Admin's note to the learner,
- * recording who declined it and when. The learner's Enrollment is untouched.
+ * Declines an open Refund Request with the Admin's note to the student,
+ * recording who declined it and when. The student's Enrollment is untouched.
  * A request that is no longer open is left untouched.
  */
 export function declineRefundRequest(
@@ -180,7 +180,7 @@ export function declineRefundRequest(
 
   return {
     outcome: "declined",
-    learner: { name: request.learner.name, email: request.learner.email },
+    student: { name: request.student.name, email: request.student.email },
     courseTitle: request.course.title,
     note,
   };

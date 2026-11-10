@@ -33,20 +33,20 @@ function getCourseBySlug(slug: string) {
 }
 
 /**
- * The confirmation the learner gets in their inbox. There is no mail
+ * The confirmation the student gets in their inbox. There is no mail
  * transport wired up yet, so the built message goes to the server log.
  */
 function buildRefundRequestEmail(input: {
-  learnerName: string;
-  learnerEmail: string;
+  studentName: string;
+  studentEmail: string;
   courseTitle: string;
   amount: number;
 }) {
   return {
-    to: input.learnerEmail,
+    to: input.studentEmail,
     subject: `Refund request received: ${input.courseTitle}`,
     body: [
-      `Hi ${input.learnerName},`,
+      `Hi ${input.studentName},`,
       "",
       `We have your refund request for "${input.courseTitle}".`,
       `If it is approved, your refund will be ${formatPrice(input.amount)}.`,
@@ -72,13 +72,13 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw data("Course not found", { status: 404 });
   }
 
-  const learner = db
+  const student = db
     .select()
     .from(users)
     .where(eq(users.id, currentUserId))
     .get();
 
-  if (!learner) {
+  if (!student) {
     throw data("User not found", { status: 404 });
   }
 
@@ -88,8 +88,8 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw data("You have not bought this course.", { status: 403 });
   }
 
-  // Matches the course page, which only offers the form to enrolled learners.
-  // A team buyer (no Enrollment of their own) or a refunded learner (ended
+  // Matches the course page, which only offers the form to enrolled students.
+  // A team buyer (no Enrollment of their own) or a refunded student (ended
   // Enrollment) is refused. Interim policy for team purchases until #8.
   if (!isEnrolled(currentUserId, course.id)) {
     throw data("You are not enrolled in this course.", { status: 403 });
@@ -124,8 +124,8 @@ export async function action({ params, request }: Route.ActionArgs) {
     .get();
 
   const email = buildRefundRequestEmail({
-    learnerName: learner.name,
-    learnerEmail: learner.email,
+    studentName: student.name,
+    studentEmail: student.email,
     courseTitle: course.title,
     amount: eligibility.refundableAmount,
   });

@@ -233,7 +233,7 @@ describe("the Admin Refund Requests screen", () => {
 
     expect(open).toEqual([
       expect.objectContaining({
-        learner: { name: "Ana Souza", email: "ana@example.com" },
+        student: { name: "Ana Souza", email: "ana@example.com" },
         courseTitle: "Advanced TypeScript",
         requestedAt: "2026-11-05T10:00:00.000Z",
         purchasedAt: "2026-10-30T09:00:00.000Z",
@@ -245,7 +245,7 @@ describe("the Admin Refund Requests screen", () => {
         reason: "The course assumes React experience I don't have yet.",
       }),
       expect.objectContaining({
-        learner: { name: "Ben Ito", email: "ben@example.com" },
+        student: { name: "Ben Ito", email: "ben@example.com" },
         courseTitle: "Intro to SQL",
         amountPaid: 1450,
         refundAmount: 1450,
@@ -297,7 +297,7 @@ describe("resolved Refund Requests on the Admin screen", () => {
     expect(resolved).toEqual([
       expect.objectContaining({
         status: "approved",
-        learner: { name: "Ben Ito" },
+        student: { name: "Ben Ito" },
         courseTitle: "Intro to SQL",
         refundAmount: 2900,
         resolvedBy: { name: "Luis Admin" },
@@ -305,7 +305,7 @@ describe("resolved Refund Requests on the Admin screen", () => {
       }),
       expect.objectContaining({
         status: "declined",
-        learner: { name: "Cy Ruiz" },
+        student: { name: "Cy Ruiz" },
         courseTitle: "Node in Depth",
         refundAmount: null,
         resolvedBy: { name: "Luis Admin" },
@@ -345,11 +345,11 @@ describe("the Refund Requests entry in the admin navigation", () => {
   function seedRefundRequestsWithStatuses(
     statuses: schema.RefundRequestStatus[]
   ) {
-    const learner = seedUser("Ana Souza", schema.UserRole.Student);
+    const student = seedUser("Ana Souza", schema.UserRole.Student);
     const { course } = seedCourse("Advanced TypeScript", 4900);
     for (const status of statuses) {
       const purchase = seedPurchase({
-        userId: learner.id,
+        userId: student.id,
         courseId: course.id,
         amountPaid: 4900,
         createdAt: "2026-11-01T09:00:00.000Z",
@@ -476,7 +476,7 @@ describe("approving a Refund Request", () => {
   });
 
   // Guards ADR 0001: a Cancellation ends the Enrollment, never deletes it.
-  it("ends the learner's Enrollment without deleting it, so they lose lesson access", async () => {
+  it("ends the student's Enrollment without deleting it, so they lose lesson access", async () => {
     signInAsAdmin();
     const { ana, course, refundRequest } = seedOpenRefundRequest();
 
@@ -499,7 +499,7 @@ describe("approving a Refund Request", () => {
     expect(access).toMatchObject({ enrolled: false, canViewContent: false });
   });
 
-  it("emails the learner the Refund amount and that their access has ended", async () => {
+  it("emails the student the Refund amount and that their access has ended", async () => {
     signInAsAdmin();
     const { refundRequest } = seedOpenRefundRequest();
 
@@ -541,7 +541,7 @@ describe("approving a Refund Request", () => {
   });
 
   // Guards ADR 0002: eligibility is decided at submission, not re-checked on approval.
-  it("approves after the learner's 14-day window has closed", async () => {
+  it("approves after the student's 14-day window has closed", async () => {
     signInAsAdmin();
     // Bought 30 days ago, asked on day 10, and only reviewed today.
     const { refundRequest } = seedOpenRefundRequest({
@@ -587,7 +587,7 @@ describe("approving a Refund Request", () => {
       expect.objectContaining({
         id: refundRequest.id,
         status: "approved",
-        learner: { name: "Ana Souza" },
+        student: { name: "Ana Souza" },
         refundAmount: 4900,
         resolvedBy: { name: "Luis Admin" },
       }),
@@ -629,7 +629,7 @@ describe("declining a Refund Request", () => {
     ]);
   });
 
-  it("emails the learner the Admin's note", async () => {
+  it("emails the student the Admin's note", async () => {
     signInAsAdmin();
     const { refundRequest } = seedOpenRefundRequest();
 
@@ -657,7 +657,7 @@ describe("declining a Refund Request", () => {
       const result = await decline(refundRequest.id, note);
 
       expect(result).toMatchObject({
-        data: { error: "Write a note to the learner." },
+        data: { error: "Write a note to the student." },
         init: { status: 400 },
       });
       expect(findRefundRequest(refundRequest.id)).toMatchObject({
@@ -738,7 +738,7 @@ describe("declining a Refund Request", () => {
       expect.objectContaining({
         id: refundRequest.id,
         status: "declined",
-        learner: { name: "Ana Souza" },
+        student: { name: "Ana Souza" },
         refundAmount: null,
         declineNote: DECLINE_NOTE,
         resolvedBy: { name: "Luis Admin" },
