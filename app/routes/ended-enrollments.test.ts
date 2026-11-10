@@ -109,6 +109,7 @@ function loaderArgs<Params extends Record<string, string>>(
   };
 }
 
+// Guards ADR 0001: every enrollment list and count ignores ended Enrollments.
 describe("a learner with an ended Enrollment", () => {
   it("no longer sees the course on their dashboard", async () => {
     const { loader } = await import("./dashboard");

@@ -35,12 +35,14 @@ Look for the originating spec, in this order:
 
 Search the repo for every file that documents how code should be written. When `CODING_STANDARDS.md` or `CONTRIBUTING.md` exists, it must be on the list.
 
+Every ADR (`docs/adr/`, or wherever the repo keeps decision records) is a standards source too. A diff that reverses a recorded decision is a hard violation unless the same diff adds an ADR that supersedes it. An ADR's "Enforced by" tests are part of the decision: a diff that weakens or deletes one is a hard violation on the same terms.
+
 On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below: a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
 
 - **The repo overrides.** A documented repo standard always wins; where it endorses something the baseline would flag, suppress the smell.
 - **Always a judgement call.** Each smell is a labelled heuristic ("possible Feature Envy"), never a hard violation. Like any standard here, skip anything tooling already enforces.
 
-Each smell reads *what it is* → *how to fix*; match it against the diff:
+Each smell reads _what it is_ → _how to fix_; match it against the diff:
 
 - **Mysterious Name**: a function, variable, or type whose name doesn't reveal what it does or holds. → rename it; if no honest name comes, the design's murky.
 - **Duplicated Code**: the same logic shape appears in more than one hunk or file in the change. → extract the shared shape, call it from both.

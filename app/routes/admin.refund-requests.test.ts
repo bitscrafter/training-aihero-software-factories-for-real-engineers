@@ -475,6 +475,7 @@ describe("approving a Refund Request", () => {
     });
   });
 
+  // Guards ADR 0001: a Cancellation ends the Enrollment, never deletes it.
   it("ends the learner's Enrollment without deleting it, so they lose lesson access", async () => {
     signInAsAdmin();
     const { ana, course, refundRequest } = seedOpenRefundRequest();
@@ -539,6 +540,7 @@ describe("approving a Refund Request", () => {
     expect(loggedLines).toEqual([]);
   });
 
+  // Guards ADR 0002: eligibility is decided at submission, not re-checked on approval.
   it("approves after the learner's 14-day window has closed", async () => {
     signInAsAdmin();
     // Bought 30 days ago, asked on day 10, and only reviewed today.

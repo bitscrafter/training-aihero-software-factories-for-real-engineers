@@ -179,6 +179,7 @@ function enrollmentsOf(userId: number) {
     .filter((e) => e.userId === userId);
 }
 
+// Guards ADR 0001: buying again reopens the Enrollment and restores learning state.
 describe("Buying again after a Cancellation", () => {
   it("reopens the same Enrollment instead of creating a second one", async () => {
     const { learner, enrollment } = await seedRefundedLearner();

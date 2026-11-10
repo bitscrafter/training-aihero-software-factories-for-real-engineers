@@ -13,3 +13,9 @@ An approved Refund Request always causes a Cancellation. We record the Cancellat
 - Learning state is shared across Enrollments, not separate for each one. Lesson progress, video positions, quiz attempts, comments and the course rating are all stored per learner and lesson, quiz or course, not per Enrollment or Purchase. So they survive a Cancellation with no extra work, and the learner's comments and rating stay visible to others.
 - When a learner buys again, their old Enrollment is reopened rather than a second one being created. A learner and a course never have more than one Enrollment, and the returning learner gets everything back: completed lessons, where they stopped in each video, quiz results and the completed date.
 - Because progress is shared, the refund limits on watch time and lessons completed count everything the learner has ever done in the course, not just what they did since the latest purchase. Otherwise a learner could take most of a course across repeated buy-and-refund rounds. Only the 14-day window restarts with each new purchase.
+
+## Enforced by
+
+- `app/routes/admin.refund-requests.test.ts`: "ends the learner's Enrollment without deleting it, so they lose lesson access".
+- `app/routes/buying-again.test.ts`: buying again or redeeming a coupon reopens the same Enrollment, and learning state comes back.
+- `app/routes/ended-enrollments.test.ts`: every enrollment list and count ignores ended Enrollments.

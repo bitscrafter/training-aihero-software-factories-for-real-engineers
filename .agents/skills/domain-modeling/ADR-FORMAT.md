@@ -21,6 +21,7 @@ Only include these when they add genuine value. Most ADRs won't need them.
 - **Status** frontmatter (`proposed | accepted | deprecated | superseded by ADR-NNNN`): useful when decisions are revisited
 - **Considered Options**: only when the rejected alternatives are worth remembering
 - **Consequences**: only when non-obvious downstream effects need to be called out
+- **Enforced by**: the tests that fail if the decision is reversed (file and test name). Add it whenever such a test exists, and mark each test with a `// Guards ADR NNNN` comment so a failing test leads back to the decision. Leave the section out when the decision can't be tested, such as a decision not to build something; then the ADR relies on code review alone.
 
 ## Numbering
 
