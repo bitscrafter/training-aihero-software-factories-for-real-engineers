@@ -89,7 +89,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
 
   // Matches the course page, which only offers the form to enrolled students.
-  // A team buyer (no Enrollment of their own) or a refunded student (ended
+  // A Team Admin (no Enrollment of their own) or a refunded student (ended
   // Enrollment) is refused. Interim policy for team purchases until #8.
   if (!isEnrolled(currentUserId, course.id)) {
     throw data("You are not enrolled in this course.", { status: 403 });

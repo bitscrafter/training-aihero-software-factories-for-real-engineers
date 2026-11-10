@@ -7,7 +7,7 @@ export type RefundFacts = {
   secondsWatched: number;
   lessonsCompleted: number;
   totalLessons: number;
-  isClaimedTeamSeat: boolean;
+  hasFilledSeat: boolean;
   hasOpenRefundRequest: boolean;
   /** An earlier Refund Request on this purchase was approved or declined. */
   hasResolvedRefundRequest: boolean;
@@ -19,7 +19,7 @@ export type RefundRule =
   | "openRefundRequest"
   | "resolvedRefundRequest"
   | "refundLimit"
-  | "claimedTeamSeat"
+  | "filledSeat"
   | "refundWindow"
   | "watchTime"
   | "lessonsCompleted";
@@ -68,10 +68,10 @@ function isUnderRefundLimit(
 
 const REFUND_LIMIT_MESSAGE = `You have already had ${MAX_APPROVED_REFUNDS_PER_COURSE} Refunds for this course, so this purchase can't be refunded.`;
 
-// A seat bought on a team licence and since claimed belongs to the team; the
-// student cannot hand it back on their own.
-function isNotClaimedTeamSeat(facts: RefundFacts): boolean {
-  return !facts.isClaimedTeamSeat;
+// A Seat on a Team's Purchase, once filled, belongs to the Team; the student
+// cannot hand it back on their own.
+function hasNoFilledSeat(facts: RefundFacts): boolean {
+  return !facts.hasFilledSeat;
 }
 
 // The window is counted in whole local days, not hours: someone who buys at
@@ -118,9 +118,9 @@ const RULES: ReadonlyArray<{
     message: REFUND_LIMIT_MESSAGE,
   },
   {
-    name: "claimedTeamSeat",
-    passes: isNotClaimedTeamSeat,
-    message: "A claimed team seat cannot be refunded.",
+    name: "filledSeat",
+    passes: hasNoFilledSeat,
+    message: "A purchase with a filled Seat cannot be refunded.",
   },
   {
     name: "refundWindow",

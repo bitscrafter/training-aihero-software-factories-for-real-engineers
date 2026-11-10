@@ -217,7 +217,7 @@ export default function Redeem({
                 </span>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Someone has already claimed this seat. Please ask the person who
+                Someone has already redeemed this coupon. Please ask the person who
                 shared this link for a new coupon.
               </p>
             </div>

@@ -42,7 +42,7 @@ One place in a course bought on a Team's Purchase, filled when a student redeems
 _Avoid_: Licence
 
 **Coupon**:
-The code that lets one student redeem one Seat.
+The code a student redeems to fill one Seat.
 _Avoid_: Voucher, Invite link
 
 **Redeem**:

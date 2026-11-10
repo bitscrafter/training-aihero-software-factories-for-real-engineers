@@ -80,6 +80,19 @@ function seedStudent() {
     .get();
 }
 
+// A Team Admin buys Seats for a Team and gets no Enrollment from them.
+function seedTeamAdmin() {
+  return db
+    .insert(schema.users)
+    .values({
+      name: "Tess Teamlead",
+      email: "tess@example.com",
+      role: schema.UserRole.Student,
+    })
+    .returning()
+    .get();
+}
+
 function seedPurchase(input: {
   userId: number;
   courseId: number;
@@ -242,10 +255,13 @@ describe("requesting a refund", () => {
     expect(storedRefundRequests()).toEqual([]);
   });
 
-  it("refuses a team buyer, who has a purchase but no Enrollment", async () => {
+  it("refuses a Team Admin, who has a purchase but no Enrollment", async () => {
     const course = seedCourse();
-    const buyer = seedStudent();
-    const purchase = seedPurchase({ userId: buyer.id, courseId: course.id });
+    const teamAdmin = seedTeamAdmin();
+    const purchase = seedPurchase({
+      userId: teamAdmin.id,
+      courseId: course.id,
+    });
     const team = db.insert(schema.teams).values({}).returning().get();
     db.insert(schema.coupons)
       .values({
@@ -255,7 +271,7 @@ describe("requesting a refund", () => {
         purchaseId: purchase.id,
       })
       .run();
-    session.userId = buyer.id;
+    session.userId = teamAdmin.id;
 
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 403,
@@ -292,7 +308,7 @@ describe("requesting a refund", () => {
     expect(storedRefundRequests()).toHaveLength(1);
   });
 
-  it("refuses a claimed team seat", async () => {
+  it("refuses a purchase with a filled Seat", async () => {
     const { course, student, purchase } = seedEligibleStudent();
     const team = db.insert(schema.teams).values({}).returning().get();
     db.insert(schema.coupons)
@@ -308,12 +324,12 @@ describe("requesting a refund", () => {
 
     expect(await expectRefusal(requestRefund())).toEqual({
       status: 403,
-      message: "A claimed team seat cannot be refunded.",
+      message: "A purchase with a filled Seat cannot be refunded.",
     });
     expect(storedRefundRequests()).toEqual([]);
   });
 
-  it("accepts a purchase whose team seat has not been claimed yet", async () => {
+  it("accepts a purchase whose Seats have not been filled yet", async () => {
     const { course, purchase } = seedEligibleStudent();
     const team = db.insert(schema.teams).values({}).returning().get();
     db.insert(schema.coupons)

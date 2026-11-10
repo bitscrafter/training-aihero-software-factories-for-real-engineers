@@ -41,7 +41,7 @@ export function getRefundFacts(
       purchasedAt: new Date(purchase.createdAt),
       ...getPriceFacts(purchase, course),
       ...getCourseUsage(userId, course.id),
-      isClaimedTeamSeat: isClaimedTeamSeat(purchase.id),
+      hasFilledSeat: hasFilledSeat(purchase.id),
       hasOpenRefundRequest: hasOpenRefundRequest(purchase.id),
       hasResolvedRefundRequest: hasResolvedRefundRequest(purchase.id),
       approvedRefundCount: getApprovedRefundCount(userId, course.id),
@@ -161,15 +161,15 @@ function getCompletedLessonCount(userId: number, lessonIds: number[]): number {
   return result?.count ?? 0;
 }
 
-function isClaimedTeamSeat(purchaseId: number): boolean {
-  const claimed = db
+function hasFilledSeat(purchaseId: number): boolean {
+  const filled = db
     .select({ id: coupons.id })
     .from(coupons)
     .where(
       and(eq(coupons.purchaseId, purchaseId), isNotNull(coupons.redeemedAt))
     )
     .get();
-  return claimed !== undefined;
+  return filled !== undefined;
 }
 
 function hasOpenRefundRequest(purchaseId: number): boolean {
