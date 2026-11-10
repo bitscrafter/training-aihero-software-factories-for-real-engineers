@@ -20,7 +20,7 @@ function facts(overrides: Partial<RefundFacts> = {}): RefundFacts {
     secondsWatched: 0,
     lessonsCompleted: 0,
     totalLessons: 10,
-    isClaimedTeamSeat: false,
+    hasRedeemedSeat: false,
     hasOpenRefundRequest: false,
     hasResolvedRefundRequest: false,
     approvedRefundCount: 0,
@@ -110,13 +110,13 @@ describe("checkRefundEligibility", () => {
     ).toMatchObject({ eligible: true });
   });
 
-  it("refuses a claimed team seat", () => {
+  it("refuses a team purchase with a redeemed seat", () => {
     expect(
-      checkRefundEligibility(facts({ isClaimedTeamSeat: true }), TODAY)
+      checkRefundEligibility(facts({ hasRedeemedSeat: true }), TODAY)
     ).toEqual({
       eligible: false,
-      failedRule: "claimedTeamSeat",
-      message: "A claimed team seat cannot be refunded.",
+      failedRule: "redeemedSeat",
+      message: "A team purchase with a redeemed seat cannot be refunded.",
     });
   });
 
@@ -167,16 +167,16 @@ describe("checkRefundEligibility", () => {
     ).toMatchObject({ failedRule: "openRefundRequest" });
   });
 
-  it("reports a resolved request before a claimed team seat", () => {
+  it("reports a resolved request before a redeemed seat", () => {
     expect(
       checkRefundEligibility(
-        facts({ hasResolvedRefundRequest: true, isClaimedTeamSeat: true }),
+        facts({ hasResolvedRefundRequest: true, hasRedeemedSeat: true }),
         TODAY
       )
     ).toMatchObject({ failedRule: "resolvedRefundRequest" });
   });
 
-  it("reports a resolved request before the Refund limit, and the limit before a claimed team seat", () => {
+  it("reports a resolved request before the Refund limit, and the limit before a redeemed seat", () => {
     expect(
       checkRefundEligibility(
         facts({ hasResolvedRefundRequest: true, approvedRefundCount: 3 }),
@@ -185,7 +185,7 @@ describe("checkRefundEligibility", () => {
     ).toMatchObject({ failedRule: "resolvedRefundRequest" });
     expect(
       checkRefundEligibility(
-        facts({ approvedRefundCount: 3, isClaimedTeamSeat: true }),
+        facts({ approvedRefundCount: 3, hasRedeemedSeat: true }),
         TODAY
       )
     ).toMatchObject({ failedRule: "refundLimit" });
@@ -194,7 +194,7 @@ describe("checkRefundEligibility", () => {
   it("reports the first failing rule when several fail", () => {
     const everythingFails = facts({
       hasOpenRefundRequest: true,
-      isClaimedTeamSeat: true,
+      hasRedeemedSeat: true,
       secondsWatched: 3 * 60 * 60,
       lessonsCompleted: 10,
     });
@@ -208,13 +208,13 @@ describe("checkRefundEligibility", () => {
         { ...everythingFails, hasOpenRefundRequest: false },
         afterTheWindow
       )
-    ).toMatchObject({ failedRule: "claimedTeamSeat" });
+    ).toMatchObject({ failedRule: "redeemedSeat" });
     expect(
       checkRefundEligibility(
         {
           ...everythingFails,
           hasOpenRefundRequest: false,
-          isClaimedTeamSeat: false,
+          hasRedeemedSeat: false,
         },
         afterTheWindow
       )
@@ -224,7 +224,7 @@ describe("checkRefundEligibility", () => {
         {
           ...everythingFails,
           hasOpenRefundRequest: false,
-          isClaimedTeamSeat: false,
+          hasRedeemedSeat: false,
         },
         TODAY
       )

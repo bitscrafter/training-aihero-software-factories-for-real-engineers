@@ -201,9 +201,9 @@ describe("Buying again after a Cancellation", () => {
   });
 });
 
-/** A team buyer's unredeemed coupon for the course. */
+/** A Team Admin's unredeemed coupon for the course. */
 function seedCoupon(courseId: number, code = "TEAM-SEAT-1") {
-  const buyer = db
+  const teamAdmin = db
     .insert(schema.users)
     .values({
       name: "Tess Teamlead",
@@ -214,7 +214,7 @@ function seedCoupon(courseId: number, code = "TEAM-SEAT-1") {
     .get();
   const purchase = db
     .insert(schema.purchases)
-    .values({ userId: buyer.id, courseId, amountPaid: 9800, country: null })
+    .values({ userId: teamAdmin.id, courseId, amountPaid: 9800, country: null })
     .returning()
     .get();
   const team = db.insert(schema.teams).values({}).returning().get();

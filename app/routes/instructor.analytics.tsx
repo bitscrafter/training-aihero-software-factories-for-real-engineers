@@ -1157,12 +1157,12 @@ function TopBuyers({
                         {buyer.seatsUnredeemed} unused
                       </span>
                     ) : (
-                      "all claimed"
+                      "all redeemed"
                     )}
                   </span>
                 </div>
               )}
-              {/* Said of team buyers too, not just solo ones: the manager who
+              {/* Said of Team Admins too, not just solo ones: the manager who
                   bought a dozen seats and never opened the course is the very
                   person this table exists to surface. */}
               <div className="text-xs text-muted-foreground">
@@ -1827,7 +1827,7 @@ export default function InstructorAnalytics({
 
             {/* Both panels sit outside the enrolment gate above: a quiz with
                 nobody enrolled to sit it, and money arriving before anybody
-                claims their seat, are things an instructor should still be
+                redeems their coupon, are things an instructor should still be
                 told about rather than shown one "nobody is enrolled" card in
                 place of. */}
             {quizzes && (

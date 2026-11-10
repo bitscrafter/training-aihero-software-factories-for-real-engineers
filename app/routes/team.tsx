@@ -51,7 +51,7 @@ interface CourseStats {
   courseTitle: string;
   courseSlug: string;
   totalSeats: number;
-  claimedSeats: number;
+  filledSeats: number;
 }
 
 interface CouponRow {
@@ -95,7 +95,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       courseTitle: string;
       courseSlug: string;
       total: number;
-      claimed: number;
+      filled: number;
     }
   >();
 
@@ -107,13 +107,13 @@ export async function loader({ request }: Route.LoaderArgs) {
         courseTitle: course?.title ?? "Unknown Course",
         courseSlug: course?.slug ?? "",
         total: 0,
-        claimed: 0,
+        filled: 0,
       });
     }
     const entry = courseMap.get(coupon.courseId)!;
     entry.total++;
     if (coupon.redeemedByUserId !== null) {
-      entry.claimed++;
+      entry.filled++;
     }
   }
 
@@ -123,7 +123,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       courseTitle: e.courseTitle,
       courseSlug: e.courseSlug,
       totalSeats: e.total,
-      claimedSeats: e.claimed,
+      filledSeats: e.filled,
     })
   );
 
@@ -221,14 +221,14 @@ export default function Team({ loaderData }: Route.ComponentProps) {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-2xl font-bold">
-                      {stat.claimedSeats}
+                      {stat.filledSeats}
                       <span className="text-base font-normal text-muted-foreground">
                         {" "}
                         / {stat.totalSeats}
                       </span>
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      seats claimed
+                      seats filled
                     </p>
                   </div>
                   <Link to={`/courses/${stat.courseSlug}/purchase?mode=team`}>
@@ -294,11 +294,11 @@ export default function Team({ loaderData }: Route.ComponentProps) {
                     <td className="px-4 py-3">
                       {coupon.redeemedByEmail ? (
                         <span className="text-muted-foreground">
-                          Claimed by {coupon.redeemedByEmail}
+                          Redeemed by {coupon.redeemedByEmail}
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                          Unclaimed
+                          Not redeemed
                         </span>
                       )}
                     </td>
