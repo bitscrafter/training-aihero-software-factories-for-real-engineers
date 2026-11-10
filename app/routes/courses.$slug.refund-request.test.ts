@@ -68,29 +68,21 @@ function seedCourse(price = 4900) {
     .get();
 }
 
-function seedStudent() {
+function seedUser(name: string, email: string) {
   return db
     .insert(schema.users)
-    .values({
-      name: "Lena Learner",
-      email: "lena@example.com",
-      role: schema.UserRole.Student,
-    })
+    .values({ name, email, role: schema.UserRole.Student })
     .returning()
     .get();
 }
 
+function seedStudent() {
+  return seedUser("Lena Learner", "lena@example.com");
+}
+
 // A Team Admin buys Seats for a Team and gets no Enrollment from them.
 function seedTeamAdmin() {
-  return db
-    .insert(schema.users)
-    .values({
-      name: "Tess Teamlead",
-      email: "tess@example.com",
-      role: schema.UserRole.Student,
-    })
-    .returning()
-    .get();
+  return seedUser("Tess Teamlead", "tess@example.com");
 }
 
 function seedPurchase(input: {
