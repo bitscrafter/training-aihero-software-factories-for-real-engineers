@@ -21,8 +21,9 @@ import {
 import { AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse, Link } from "react-router";
 import { db } from "~/db";
-import { and, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { formatPrice } from "~/lib/utils";
+import { REFUND_REQUEST_STATUS_LABELS } from "~/lib/refund-requests";
 
 const settingsSchema = z.object({
   name: z.string().trim().min(1, "Name cannot be empty."),
@@ -55,24 +56,25 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("User not found.", { status: 404 });
   }
 
-  const pendingRefundRequests = db
+  // Every Refund Request the learner has made, newest first, with its outcome.
+  const learnerRefundRequests = db
     .select({
       id: refundRequests.id,
       courseTitle: courses.title,
       courseSlug: courses.slug,
       amountPaid: purchases.amountPaid,
       reason: refundRequests.reason,
+      status: refundRequests.status,
+      amountRefunded: refundRequests.amountRefunded,
+      declineNote: refundRequests.declineNote,
       requestedAt: refundRequests.requestedAt,
+      resolvedAt: refundRequests.resolvedAt,
     })
     .from(refundRequests)
     .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(
-      and(
-        eq(purchases.userId, currentUserId),
-        eq(refundRequests.status, RefundRequestStatus.Requested)
-      )
-    )
+    .where(eq(purchases.userId, currentUserId))
+    .orderBy(desc(refundRequests.requestedAt), desc(refundRequests.id))
     .all();
 
   return {
@@ -83,7 +85,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       bio: currentUser.bio,
       role: currentUser.role,
     },
-    pendingRefundRequests,
+    refundRequests: learnerRefundRequests,
   };
 }
 
@@ -112,8 +114,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   const { name, bio } = parsed.data;
 
-  db
-    .update(users)
+  db.update(users)
     .set({ name, email: currentUser.email, bio: bio || null })
     .where(eq(users.id, currentUser.id))
     .returning()
@@ -122,7 +123,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { user, pendingRefundRequests } = loaderData;
+  const { user, refundRequests } = loaderData;
   const fetcher = useFetcher();
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,7 +132,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
       toast.success("Profile updated successfully.");
     }
     if (fetcher.state === "idle" && fetcher.data?.errors) {
-      const firstError = Object.values(fetcher.data.errors)[0] as string | undefined;
+      const firstError = Object.values(fetcher.data.errors)[0] as
+        string | undefined;
       if (firstError) toast.error(firstError);
     }
   }, [fetcher.state, fetcher.data]);
@@ -199,28 +201,23 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                 </p>
               </div>
             )}
-            <Button
-              type="submit"
-              disabled={fetcher.state !== "idle"}
-            >
+            <Button type="submit" disabled={fetcher.state !== "idle"}>
               {fetcher.state !== "idle" ? "Saving..." : "Save Changes"}
             </Button>
           </fetcher.Form>
         </CardContent>
       </Card>
 
-      {pendingRefundRequests.length > 0 && (
+      {refundRequests.length > 0 && (
         <Card className="mt-8 max-w-md">
           <CardHeader>
-            <h2 className="text-lg font-semibold">Pending refund requests</h2>
+            <h2 className="text-lg font-semibold">Refund Requests</h2>
             <p className="text-sm text-muted-foreground">
-              {pendingRefundRequests.length === 1
-                ? "One refund request is waiting on us."
-                : `${pendingRefundRequests.length} refund requests are waiting on us.`}
+              Every Refund Request you have made, and what came of it.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            {pendingRefundRequests.map((refundRequest) => (
+            {refundRequests.map((refundRequest) => (
               <div key={refundRequest.id} className="rounded-md border p-3">
                 <div className="flex items-start justify-between gap-3">
                   <Link
@@ -229,21 +226,60 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                   >
                     {refundRequest.courseTitle}
                   </Link>
-                  <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                    Pending
-                  </span>
+                  <RefundRequestStatusBadge status={refundRequest.status} />
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {formatPrice(refundRequest.amountPaid)} · raised{" "}
+                  {formatPrice(refundRequest.amountPaid)} · requested{" "}
                   {new Date(refundRequest.requestedAt).toLocaleDateString()}
+                  {refundRequest.resolvedAt && (
+                    <>
+                      {" "}
+                      · resolved{" "}
+                      {new Date(refundRequest.resolvedAt).toLocaleDateString()}
+                    </>
+                  )}
                 </p>
                 <p className="mt-2 text-sm">{refundRequest.reason}</p>
+                {refundRequest.status === RefundRequestStatus.Approved &&
+                  refundRequest.amountRefunded !== null && (
+                    <p className="mt-2 text-sm font-medium">
+                      Refund: {formatPrice(refundRequest.amountRefunded)}
+                    </p>
+                  )}
+                {refundRequest.status === RefundRequestStatus.Declined &&
+                  refundRequest.declineNote && (
+                    <div className="mt-2 rounded-md bg-muted p-2 text-sm">
+                      <p className="font-medium">Note from our team</p>
+                      <p className="whitespace-pre-line">
+                        {refundRequest.declineNote}
+                      </p>
+                    </div>
+                  )}
               </div>
             ))}
           </CardContent>
         </Card>
       )}
     </div>
+  );
+}
+
+const STATUS_BADGE_CLASSES: Record<RefundRequestStatus, string> = {
+  [RefundRequestStatus.Requested]:
+    "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  [RefundRequestStatus.Approved]:
+    "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  [RefundRequestStatus.Declined]:
+    "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+};
+
+function RefundRequestStatusBadge({ status }: { status: RefundRequestStatus }) {
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE_CLASSES[status]}`}
+    >
+      {REFUND_REQUEST_STATUS_LABELS[status]}
+    </span>
   );
 }
 
@@ -260,12 +296,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           : "Please select a user from the DevUI panel.";
     } else if (error.status === 404) {
       title = "User not found";
-      message =
-        typeof error.data === "string" ? error.data : "User not found.";
+      message = typeof error.data === "string" ? error.data : "User not found.";
     } else {
       title = `Error ${error.status}`;
-      message =
-        typeof error.data === "string" ? error.data : error.statusText;
+      message = typeof error.data === "string" ? error.data : error.statusText;
     }
   }
 

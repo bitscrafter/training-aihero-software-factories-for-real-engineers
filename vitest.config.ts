@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     globals: true,
-    exclude: [...configDefaults.exclude],
+    // Agent worktrees live under .claude/worktrees; their tests aren't ours.
+    exclude: [...configDefaults.exclude, ".claude/**"],
   },
 });

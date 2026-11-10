@@ -4,6 +4,11 @@ import { toast } from "sonner";
 import { z } from "zod";
 import type { Route } from "./+types/courses.$slug.purchase";
 import { getCurrentUserId } from "~/lib/session";
+import {
+  enroll,
+  isActiveEnrollment,
+  isEnrolled,
+} from "~/lib/enrollment.server";
 import { db } from "~/db";
 import {
   courses,
@@ -38,6 +43,8 @@ import { formatDuration, formatPrice } from "~/lib/utils";
 import { resolveCountry } from "~/lib/country.server";
 import { calculatePppPrice, getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { parseFormData, parseParams } from "~/lib/validation";
+import { getRefundLimitWarning } from "~/lib/refund-eligibility";
+import { getApprovedRefundCount } from "~/lib/refund-eligibility.server";
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
@@ -118,64 +125,20 @@ function getLessonCountForCourse(courseId: number) {
   return count?.count ?? 0;
 }
 
-function findEnrollment(userId: number, courseId: number) {
-  return db
-    .select()
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
-}
 
-function isUserEnrolled(userId: number, courseId: number) {
-  return !!findEnrollment(userId, courseId);
-}
 
 function getEnrollmentCountForCourse(courseId: number) {
   const result = db
     .select({ count: sql<number>`count(*)` })
     .from(enrollments)
-    .where(eq(enrollments.courseId, courseId))
+    .where(
+      and(eq(enrollments.courseId, courseId), isActiveEnrollment())
+    )
     .get();
 
   return result?.count ?? 0;
 }
 
-function enrollUser(
-  userId: number,
-  courseId: number,
-  sendEmail: boolean,
-  skipValidation: boolean
-) {
-  if (!skipValidation) {
-    const existing = findEnrollment(userId, courseId);
-    if (existing) {
-      throw new Error("User is already enrolled in this course");
-    }
-
-    const course = db
-      .select()
-      .from(courses)
-      .where(eq(courses.id, courseId))
-      .get();
-    if (!course) {
-      throw new Error("Course not found");
-    }
-  }
-
-  const enrollment = db
-    .insert(enrollments)
-    .values({ userId, courseId })
-    .returning()
-    .get();
-
-  if (sendEmail) {
-    // Would send welcome email here
-  }
-
-  return enrollment;
-}
 
 function createPurchase(
   userId: number,
@@ -296,7 +259,7 @@ export async function loader({ params, request, url }: Route.LoaderArgs) {
 
   const mode = url.searchParams.get("mode");
 
-  const enrolled = isUserEnrolled(currentUserId, course.id);
+  const enrolled = isEnrolled(currentUserId, course.id);
 
   if (enrolled && mode !== "team") {
     throw redirect(`/courses/${slug}?already_enrolled=1`);
@@ -335,6 +298,9 @@ export async function loader({ params, request, url }: Route.LoaderArgs) {
     country,
     countryName,
     isEnrolled: enrolled,
+    refundLimitWarning: getRefundLimitWarning(
+      getApprovedRefundCount(currentUserId, course.id)
+    ),
   };
 }
 
@@ -364,11 +330,11 @@ export async function action({ params, request }: Route.ActionArgs) {
     : course.price;
 
   if (parsed.data.intent === "confirm-purchase") {
-    if (isUserEnrolled(currentUserId, course.id)) {
+    if (isEnrolled(currentUserId, course.id)) {
       throw redirect(`/courses/${slug}`);
     }
     createPurchase(currentUserId, course.id, pppPrice, country);
-    enrollUser(currentUserId, course.id, false, false);
+    enroll(currentUserId, course.id);
     throw redirect(`/courses/${slug}/welcome`);
   }
 
@@ -391,6 +357,7 @@ export default function PurchaseConfirmation({
     tierInfo,
     countryName,
     isEnrolled,
+    refundLimitWarning,
   } = loaderData;
   const fetcher = useFetcher();
   const isSubmitting = fetcher.state !== "idle";
@@ -477,6 +444,17 @@ export default function PurchaseConfirmation({
               <div className="mb-4 rounded-lg bg-green-50 p-3 dark:bg-green-900/20">
                 <p className="text-sm text-green-800 dark:text-green-300">
                   PPP discount applied for {countryName} — {tierInfo.label}
+                </p>
+              </div>
+            )}
+
+            {refundLimitWarning && (
+              <div
+                role="alert"
+                className="mb-4 rounded-lg bg-amber-50 p-3 dark:bg-amber-900/20"
+              >
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  {refundLimitWarning}
                 </p>
               </div>
             )}

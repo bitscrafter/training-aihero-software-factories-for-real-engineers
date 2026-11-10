@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { checkRefundEligibility, type RefundFacts } from "./refund-eligibility";
+import {
+  checkRefundEligibility,
+  getRefundableAmount,
+  getRefundLimitWarning,
+  type RefundFacts,
+} from "./refund-eligibility";
 
 // Dates are built in local time: the window is counted in whole local days.
 const PURCHASED_AT = new Date(2026, 2, 1, 10, 0); // 1 March 2026, 10:00
@@ -17,6 +22,8 @@ function facts(overrides: Partial<RefundFacts> = {}): RefundFacts {
     totalLessons: 10,
     isClaimedTeamSeat: false,
     hasOpenRefundRequest: false,
+    hasResolvedRefundRequest: false,
+    approvedRefundCount: 0,
     ...overrides,
   };
 }
@@ -123,6 +130,67 @@ describe("checkRefundEligibility", () => {
     });
   });
 
+  it("refuses a purchase whose Refund Request was already resolved", () => {
+    expect(
+      checkRefundEligibility(facts({ hasResolvedRefundRequest: true }), TODAY)
+    ).toEqual({
+      eligible: false,
+      failedRule: "resolvedRefundRequest",
+      message:
+        "This purchase already had a Refund Request, and that decision is final.",
+    });
+  });
+
+  it("is eligible after 2 approved Refunds for the course", () => {
+    expect(
+      checkRefundEligibility(facts({ approvedRefundCount: 2 }), TODAY)
+    ).toMatchObject({ eligible: true });
+  });
+
+  it("refuses once the learner has had 3 approved Refunds for the course", () => {
+    expect(
+      checkRefundEligibility(facts({ approvedRefundCount: 3 }), TODAY)
+    ).toEqual({
+      eligible: false,
+      failedRule: "refundLimit",
+      message:
+        "You have already had 3 Refunds for this course, so this purchase can't be refunded.",
+    });
+  });
+
+  it("reports an open request before a resolved one", () => {
+    expect(
+      checkRefundEligibility(
+        facts({ hasOpenRefundRequest: true, hasResolvedRefundRequest: true }),
+        TODAY
+      )
+    ).toMatchObject({ failedRule: "openRefundRequest" });
+  });
+
+  it("reports a resolved request before a claimed team seat", () => {
+    expect(
+      checkRefundEligibility(
+        facts({ hasResolvedRefundRequest: true, isClaimedTeamSeat: true }),
+        TODAY
+      )
+    ).toMatchObject({ failedRule: "resolvedRefundRequest" });
+  });
+
+  it("reports a resolved request before the Refund limit, and the limit before a claimed team seat", () => {
+    expect(
+      checkRefundEligibility(
+        facts({ hasResolvedRefundRequest: true, approvedRefundCount: 3 }),
+        TODAY
+      )
+    ).toMatchObject({ failedRule: "resolvedRefundRequest" });
+    expect(
+      checkRefundEligibility(
+        facts({ approvedRefundCount: 3, isClaimedTeamSeat: true }),
+        TODAY
+      )
+    ).toMatchObject({ failedRule: "refundLimit" });
+  });
+
   it("reports the first failing rule when several fail", () => {
     const everythingFails = facts({
       hasOpenRefundRequest: true,
@@ -183,5 +251,49 @@ describe("checkRefundEligibility", () => {
         TODAY
       )
     ).toMatchObject({ eligible: true, refundableAmount: 4900 });
+  });
+});
+
+describe("getRefundLimitWarning", () => {
+  it("has no warning below 3 approved Refunds", () => {
+    expect(getRefundLimitWarning(0)).toBeNull();
+    expect(getRefundLimitWarning(2)).toBeNull();
+  });
+
+  it("warns at and above 3 approved Refunds", () => {
+    const warning =
+      "You have already had 3 Refunds for this course, so this purchase can't be refunded.";
+    expect(getRefundLimitWarning(3)).toBe(warning);
+    expect(getRefundLimitWarning(4)).toBe(warning);
+  });
+});
+
+describe("getRefundableAmount", () => {
+  it("is the amount paid for a purchasing-power price", () => {
+    expect(
+      getRefundableAmount({
+        amountPaid: 2450,
+        listPrice: 4900,
+        purchasingPowerDiscountApplied: true,
+      })
+    ).toBe(2450);
+  });
+
+  it("is the list price, not the amount paid, without a discount", () => {
+    expect(
+      getRefundableAmount({
+        amountPaid: 3900,
+        listPrice: 4900,
+        purchasingPowerDiscountApplied: false,
+      })
+    ).toBe(4900);
+  });
+
+  it("does not depend on eligibility: a closed window still has an amount", () => {
+    expect(
+      getRefundableAmount(
+        facts({ purchasedAt: new Date(2020, 0, 1), secondsWatched: 99999 })
+      )
+    ).toBe(4900);
   });
 });

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { db } from "~/db";
 import {
   coupons,
@@ -12,7 +12,10 @@ import {
   videoWatchEvents,
 } from "~/db/schema";
 import { getDiscountForCountry } from "~/lib/ppp";
-import type { RefundFacts } from "~/lib/refund-eligibility";
+import {
+  getRefundableAmount,
+  type RefundFacts,
+} from "~/lib/refund-eligibility";
 
 /**
  * Reads, for a learner's latest purchase of a course, the facts that
@@ -32,22 +35,81 @@ export function getRefundFacts(
 
   if (!purchase) return null;
 
-  const lessonIds = getLessonIds(course.id);
-
   return {
     purchaseId: purchase.id,
     facts: {
       purchasedAt: new Date(purchase.createdAt),
-      amountPaid: purchase.amountPaid,
-      listPrice: course.price,
-      purchasingPowerDiscountApplied:
-        getDiscountForCountry(purchase.country) > 0,
-      secondsWatched: getSecondsWatched(userId, lessonIds),
-      lessonsCompleted: getCompletedLessonCount(userId, lessonIds),
-      totalLessons: lessonIds.length,
+      ...getPriceFacts(purchase, course),
+      ...getCourseUsage(userId, course.id),
       isClaimedTeamSeat: isClaimedTeamSeat(purchase.id),
       hasOpenRefundRequest: hasOpenRefundRequest(purchase.id),
+      hasResolvedRefundRequest: hasResolvedRefundRequest(purchase.id),
+      approvedRefundCount: getApprovedRefundCount(userId, course.id),
     },
+  };
+}
+
+/**
+ * The Refund a purchase of the course would get, in cents, without checking
+ * eligibility. For the Admin Refund Requests screen and approval.
+ */
+export function getRefundableAmountForPurchase(
+  purchase: { amountPaid: number; country: string | null },
+  course: { price: number }
+): number {
+  return getRefundableAmount(getPriceFacts(purchase, course));
+}
+
+/**
+ * How many approved Refunds a learner has had for a course, across every
+ * purchase of it. Declined and open requests don't count.
+ */
+export function getApprovedRefundCount(
+  userId: number,
+  courseId: number
+): number {
+  const result = db
+    .select({ count: sql<number>`count(*)` })
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
+    .where(
+      and(
+        eq(purchases.userId, userId),
+        eq(purchases.courseId, courseId),
+        eq(refundRequests.status, RefundRequestStatus.Approved)
+      )
+    )
+    .get();
+  return result?.count ?? 0;
+}
+
+/**
+ * How much of a course a learner has used, all-time across every purchase:
+ * watch time in seconds, lessons completed, and the course's lesson count.
+ */
+export function getCourseUsage(
+  userId: number,
+  courseId: number
+): Pick<RefundFacts, "secondsWatched" | "lessonsCompleted" | "totalLessons"> {
+  const lessonIds = getLessonIds(courseId);
+  return {
+    secondsWatched: getSecondsWatched(userId, lessonIds),
+    lessonsCompleted: getCompletedLessonCount(userId, lessonIds),
+    totalLessons: lessonIds.length,
+  };
+}
+
+function getPriceFacts(
+  purchase: { amountPaid: number; country: string | null },
+  course: { price: number }
+): Pick<
+  RefundFacts,
+  "amountPaid" | "listPrice" | "purchasingPowerDiscountApplied"
+> {
+  return {
+    amountPaid: purchase.amountPaid,
+    listPrice: course.price,
+    purchasingPowerDiscountApplied: getDiscountForCountry(purchase.country) > 0,
   };
 }
 
@@ -122,4 +184,19 @@ function hasOpenRefundRequest(purchaseId: number): boolean {
     )
     .get();
   return open !== undefined;
+}
+
+// Approved or declined: anything no longer waiting for an Admin.
+function hasResolvedRefundRequest(purchaseId: number): boolean {
+  const resolved = db
+    .select({ id: refundRequests.id })
+    .from(refundRequests)
+    .where(
+      and(
+        eq(refundRequests.purchaseId, purchaseId),
+        ne(refundRequests.status, RefundRequestStatus.Requested)
+      )
+    )
+    .get();
+  return resolved !== undefined;
 }

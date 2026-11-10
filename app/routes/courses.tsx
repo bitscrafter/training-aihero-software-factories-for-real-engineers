@@ -14,6 +14,7 @@ import {
   LessonProgressStatus,
 } from "~/db/schema";
 import { eq, like, and, or, sql, inArray } from "drizzle-orm";
+import { isActiveEnrollment } from "~/lib/enrollment.server";
 import { Card, CardContent, CardFooter, CardHeader } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -127,7 +128,12 @@ function getUserEnrolledCourses(userId: number) {
     })
     .from(enrollmentsTable)
     .innerJoin(coursesTable, eq(enrollmentsTable.courseId, coursesTable.id))
-    .where(eq(enrollmentsTable.userId, userId))
+    .where(
+      and(
+        eq(enrollmentsTable.userId, userId),
+        isActiveEnrollment()
+      )
+    )
     .all();
 }
 

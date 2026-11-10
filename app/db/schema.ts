@@ -132,6 +132,9 @@ export const enrollments = sqliteTable(
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
     completedAt: text("completed_at"),
+    // Set by a Cancellation; null while the Enrollment is active. An ended
+    // Enrollment is kept, never deleted (ADR 0001).
+    endedAt: text("ended_at"),
   },
   (table) => [index("enrollments_course_idx").on(table.courseId)]
 );
@@ -246,6 +249,8 @@ export const refundRequests = sqliteTable(
     // The Refund given. Null until someone approves; a declined request
     // refunds nothing.
     amountRefunded: integer("amount_refunded"),
+    // The Admin's note to the learner. Set only when the request is declined.
+    declineNote: text("decline_note"),
     requestedAt: text("requested_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
