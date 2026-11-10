@@ -521,9 +521,7 @@ function getCourseProgressSummary(courseId: number): CourseProgressSummary {
         inArray(lessonProgress.lessonId, courseLessonIds(courseId))
       )
     )
-    .where(
-      and(eq(enrollments.courseId, courseId), isActiveEnrollment())
-    )
+    .where(and(eq(enrollments.courseId, courseId), isActiveEnrollment()))
     .groupBy(enrollments.userId)
     .all();
 
@@ -561,9 +559,7 @@ function getCourseDropOff(courseId: number): CourseFunnel {
   const enrolled = db
     .select({ enrolledCount: countDistinct(enrollments.userId) })
     .from(enrollments)
-    .where(
-      and(eq(enrollments.courseId, courseId), isActiveEnrollment())
-    )
+    .where(and(eq(enrollments.courseId, courseId), isActiveEnrollment()))
     .get();
 
   const enrolledCount = enrolled?.enrolledCount ?? 0;

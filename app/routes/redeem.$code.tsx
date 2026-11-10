@@ -4,11 +4,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import type { Route } from "./+types/redeem.$code";
 import { getCurrentUserId } from "~/lib/session";
-import {
-  enroll,
-  isEnrolled,
-  type Enrollment,
-} from "~/lib/enrollment.server";
+import { enroll, isEnrolled, type Enrollment } from "~/lib/enrollment.server";
 import { resolveCountry } from "~/lib/country.server";
 import { parseParams, parseFormData } from "~/lib/validation";
 import { Card, CardContent } from "~/components/ui/card";
@@ -27,10 +23,8 @@ function getCouponByCode(code: string) {
   return db.select().from(coupons).where(eq(coupons.code, code)).get();
 }
 
-
 type RedeemResult =
-  | { ok: true; enrollment: Enrollment }
-  | { ok: false; error: string };
+  { ok: true; enrollment: Enrollment } | { ok: false; error: string };
 
 function redeemCoupon(
   code: string,
@@ -217,8 +211,8 @@ export default function Redeem({
                 </span>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Someone has already redeemed this coupon. Please ask the person who
-                shared this link for a new coupon.
+                Someone has already redeemed this coupon. Please ask the person
+                who shared this link for a new coupon.
               </p>
             </div>
           ) : alreadyEnrolled ? (
